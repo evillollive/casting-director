@@ -1,6 +1,6 @@
 # GitHub Story Casting Director: Weekly Scan (Tier 0 prompt)
 
-Paste this whole file into Claude (web search ON) or Manus (let it browse). Run it weekly. Each run, edit the **TUNING** and **TASTE LOG** sections at the bottom based on what you loved and what you cut. Those edits are the real product. They teach the tool your eye over time.
+Paste this whole file into an AI assistant with web search ON, or a browsing agent that can reach the sources. Run it weekly. Each run, edit the **TUNING** and **TASTE LOG** sections at the bottom based on what you loved and what you cut. Those edits are the real product. They teach the tool your eye over time.
 
 ---
 

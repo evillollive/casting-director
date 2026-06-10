@@ -22,7 +22,7 @@ Use it when the user asks for a casting scan, a weekly shortlist, "who's worth f
 
 Before running, make sure you have:
 
-- **Web access / browsing.** This skill is useless without live sources. Use web search (Claude) or a browsing agent (Manus). If you can't browse, say so rather than inventing candidates.
+- **Web access / browsing.** This skill is useless without live sources. Use an assistant with web search, or a browsing agent. If you can't browse, say so rather than inventing candidates.
 - **The current rubric** in [`rubric.md`](rubric.md). Score against it exactly.
 - **The current rolodex** in [`rolodex/do-not-resurface.md`](rolodex/do-not-resurface.md). Never re-surface anyone on it.
 - **Any active tuning** (beat focus, hard nos, "more of") from the TUNING section of the Tier 0 prompt.

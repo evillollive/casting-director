@@ -10,7 +10,7 @@ Zero infrastructure. Write one rich prompt that names your sources and your rubr
 - Each time, edit the TUNING and TASTE LOG based on what it nailed and what it missed.
 - The rubric you converge on becomes the spec for the real tool. **Don't write a line of pipeline code until it's stable.**
 
-This is what a browsing agent like Manus is built for: it browses live, runs multi-step, and its scheduled-tasks feature can run a recurring automation weekly without re-prompting. A clean split is to let the browsing agent do the sourcing, then hand candidates to Claude for the judgment and brief-writing, where you want consistent taste. (See the cautions in [`sources.md`](sources.md) about credit costs and keeping sensitive data out of third-party tools.)
+This is what a browsing agent is built for: it browses live, runs multi-step, and some can run a recurring automation weekly on a schedule without re-prompting. A clean split is to let the browsing agent do the sourcing, then hand candidates to a strong reasoning model for the judgment and brief-writing, where you want consistent taste. (See the cautions in [`sources.md`](sources.md) about credit costs and keeping sensitive data out of third-party tools.)
 
 ## Tier 1: scheduled pipeline (the sweet spot)
 
@@ -18,7 +18,7 @@ Once the rubric is stable, codify it. This fits a GitHub-native workflow well:
 
 - A script pulls candidates from the cheap/free feeds (see [`sources.md`](sources.md)).
 - Dedupes against a stored "seen" list (your starter rolodex in [`rolodex/`](rolodex/)).
-- Sends survivors to the Claude API with your rubric, getting back scores and casting briefs.
+- Sends survivors to an LLM API with your rubric, getting back scores and casting briefs.
 - Emits a markdown report to email, Slack, a committed file, or a GitHub Issue.
 - Runs on a GitHub Actions cron: free, scheduled, and already where you live.
 

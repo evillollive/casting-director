@@ -18,6 +18,6 @@ The feasibility differs a lot by platform, so this list carries each source's 20
 
 ## A note on tooling for Tier 0
 
-A clean split for the manual phase: let a browsing agent (e.g. Manus, which can run scheduled tasks and use a cloud browser for sources like X that are hard to hit via API) do the sourcing and browsing, then hand candidates to Claude for the judgment and brief-writing, where you want consistent taste.
+A clean split for the manual phase: let a browsing agent (one that can run scheduled tasks and reach a live browser for sources like X that are hard to hit via API) do the sourcing and browsing, then hand candidates to a strong reasoning model for the judgment and brief-writing, where you want consistent taste.
 
 Two cautions on credit-metered browsing agents: they can drain credits fast (a single wide research run can be expensive), and you should keep anything sensitive out of third-party tools. For public-web casting that's not really an issue.

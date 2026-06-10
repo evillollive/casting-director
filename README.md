@@ -29,7 +29,7 @@ The wide net is the easy part. What this skill is really for is **taste and judg
 You're at **Tier 0**: prompt-as-product, zero infrastructure.
 
 1. Open [`prompts/tier0-weekly-scan.md`](prompts/tier0-weekly-scan.md).
-2. Paste it into Claude (web search on) or Manus (let it browse).
+2. Paste it into an AI assistant with live web search on, or a browsing agent that can reach the sources.
 3. Read the shortlist. After each run, edit the TUNING and TASTE LOG sections based on what it nailed and what it missed.
 
 Those edits are the real work. They calibrate the tool's taste. **Don't write a line of pipeline code until the rubric is stable** (see [`roadmap.md`](roadmap.md)).
@@ -37,7 +37,7 @@ Those edits are the real work. They calibrate the tool's taste. **Don't write a 
 ## The build path, in one breath
 
 - **Tier 0**: one rich prompt, run manually each week, to calibrate taste.
-- **Tier 1**: once the rubric is stable, codify it: a script pulls feeds, dedupes against the rolodex, sends survivors to the Claude API with your rubric, emits a markdown report on a GitHub Actions cron.
+- **Tier 1**: once the rubric is stable, codify it: a script pulls feeds, dedupes against the rolodex, sends survivors to an LLM API with your rubric, emits a markdown report on a GitHub Actions cron.
 - **Tier 2**: a small app with a real rolodex DB (status, tags, notes) and a dashboard, only if it earns its keep.
 
 Do them in order. The rolodex is the part that compounds.
