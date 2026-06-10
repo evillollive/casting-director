@@ -1,0 +1,19 @@
+# OS / editor cruft
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Secrets and local env (for when Tier 1 lands)
+.env
+.env.*
+*.local
+
+# Python (Tier 1)
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Node (Tier 1)
+node_modules/
