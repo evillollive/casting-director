@@ -25,6 +25,8 @@ There's one executable artifact and a few reference files. The prompt is what yo
 | [`sources.md`](sources.md) | The source list with its 2026 access realities (what's free, what's blocked, what costs money). |
 | [`rolodex/`](rolodex/) | Persistent memory: the do-not-resurface list and the taste log that teach the tool your eye over time. |
 | [`roadmap.md`](roadmap.md) | The three-tier build path, so the prompt can grow into a scheduled pipeline later. |
+| [`tools/casting_eval.py`](tools/casting_eval.py) | A linter for an actual run's output: catches hallucinated candidates, missing sources, undated "why now", gate violations, and resurfaced names. |
+| [`tests/`](tests/) | The test suite: spec-conformance checks plus adversarial output fixtures. See [`tests/README.md`](tests/README.md). |
 
 ## How to use it this week
 
@@ -43,3 +45,7 @@ Those edits are the real work. They calibrate the tool's taste. **Don't write a 
 - **Tier 2**: a small app with a real rolodex DB (status, tags, notes) and a dashboard, only if it earns its keep.
 
 Do them in order. The rolodex is the part that compounds.
+
+## Testing
+
+Even though the skill is a spec plus a prompt, it's tested. Run `pip install -r requirements-dev.txt` then `pytest tests/ -q`. The suite has two layers: spec-conformance checks (the prompt stays self-contained and in sync with `rubric.md`, no em dashes or vendor names, links resolve) and an output evaluator (`tools/casting_eval.py`) that lints a real run's output against the hard rules. You can run the evaluator on any output by hand: `python tools/casting_eval.py run.md --dnr rolodex/do-not-resurface.md`. See [`tests/README.md`](tests/README.md).

@@ -17,3 +17,6 @@ venv/
 
 # Node (Tier 1)
 node_modules/
+
+# pytest
+.pytest_cache/

@@ -1,0 +1,58 @@
+# Tests
+
+Two layers, because the "skill" is a spec plus a runnable prompt, not an app.
+
+## 1. Spec conformance (`test_spec_conformance.py`)
+
+Deterministic checks that the repo stays internally consistent and policy-clean:
+
+- every required file exists and internal links resolve;
+- the prompt is self-contained (has Role, Sources, Rubric, Gates, Verification rules, Exclusions, Output format, TUNING, a DO-NOT-RESURFACE paste block, and TASTE LOG);
+- the rubric dimensions and the explicit gates appear in the prompt;
+- `rubric.md` stays in sync with the prompt and keeps the diversity bug fixed (diversity is a list-level rule, not a per-candidate score);
+- `SKILL.md` stays a thin wrapper instead of re-embedding the output template;
+- no em dashes and no vendor names anywhere (the user's hard rules, encoded as regression guards).
+
+## 2. Output evaluation (`test_output_evaluator.py` + `tools/casting_eval.py`)
+
+`tools/casting_eval.py` is a reusable linter for an actual run's output. It encodes the skill's hard rules and flags the failure modes that matter:
+
+| Code | Severity | What it catches |
+|------|----------|-----------------|
+| `NO_ENTRIES` | error | Output is neither a refusal nor a shortlist. |
+| `REFUSAL_WITH_CANDIDATES` | error | Claims no web access but still lists candidates (the core hallucination trap). |
+| `MISSING_FIELD` | error | A required brief field is absent. |
+| `NO_SOURCE_URL` | error | A candidate has no live source link. |
+| `UNDATED_WHY_NOW` | error | "Why now" has no date and is not labeled evergreen. |
+| `BAD_SCORE` / `BAD_SCORE_TUPLE` | error | Missing overall score or per-dimension tuple. |
+| `GATE_PROTAGONIST` / `GATE_HOOK` | error | Shortlisted despite failing a gate (score < 3). |
+| `RESURFACED` | error | A candidate is on the do-not-resurface list. |
+| `SHORTLIST_SIZE` | error/warn | More than 8, or fewer than 5 without a "quiet week" note. |
+| `MONOTONE_SHORTLIST` | warn | All entries from one source, unacknowledged. |
+| `CORPORATE_FALSE_POSITIVE` | warn | Looks funded/corporate with no caveat. |
+| `DEAD_SOURCE_URL` | error | (Live mode only) a source URL didn't resolve. |
+
+The fixtures in `fixtures/` are simulated run outputs, each engineered to trigger one category (or none, for `run_good.md`). The tests assert the evaluator flags exactly what it should.
+
+## Running
+
+```bash
+pip install -r requirements-dev.txt
+pytest tests/ -q
+```
+
+Lint a real run's output with the standalone tool:
+
+```bash
+python tools/casting_eval.py path/to/run.md --dnr rolodex/do-not-resurface.md
+```
+
+Add network URL resolution (skipped by default so the suite is deterministic):
+
+```bash
+CASTING_EVAL_LIVE=1 python tools/casting_eval.py path/to/run.md
+```
+
+## Adding a fixture
+
+Add a markdown run output to `fixtures/`, then assert its expected violation codes in `test_output_evaluator.py`. Keep each fixture focused on one failure category so a regression points at one cause.
