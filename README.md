@@ -36,6 +36,8 @@ You're at **Tier 0**: prompt-as-product, zero infrastructure.
 2. Paste [`prompts/tier0-weekly-scan.md`](prompts/tier0-weekly-scan.md) into an AI assistant with live web search on, or a browsing agent that can reach the sources.
 3. Read the shortlist. After each run, append a line to the prompt's TASTE LOG based on what it nailed and what it missed.
 
+Want to see what a finished shortlist looks like first? [`tests/fixtures/run_good.md`](tests/fixtures/run_good.md) is a clean sample run that passes every check.
+
 Those edits are the real work. They calibrate the tool's taste. **Don't write a line of pipeline code until the rubric is stable** (see [`roadmap.md`](roadmap.md)). The single source of truth for a run is the prompt; `rubric.md` is where stable lessons graduate, and the two stay in sync with a one-line update when something changes.
 
 ## The build path, in one breath
@@ -49,3 +51,7 @@ Do them in order. The rolodex is the part that compounds.
 ## Testing
 
 Even though the skill is a spec plus a prompt, it's tested. Run `pip install -r requirements-dev.txt` then `pytest tests/ -q`. The suite has two layers: spec-conformance checks (the prompt stays self-contained and in sync with `rubric.md`, no em dashes or vendor names, links resolve) and an output evaluator (`tools/casting_eval.py`) that lints a real run's output against the hard rules. You can run the evaluator on any output by hand: `python tools/casting_eval.py run.md --dnr rolodex/do-not-resurface.md`. See [`tests/README.md`](tests/README.md).
+
+## Contributing and license
+
+Most contributing here is teaching the tool your taste, not writing code. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the weekly loop and the one rule that matters (graduating TASTE LOG patterns into the rubric and prompt together). Licensed under AGPL-3.0; see [`LICENSE`](LICENSE).
