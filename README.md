@@ -15,11 +15,13 @@ The wide net is the easy part. What this skill is really for is **taste and judg
 
 ## What's in here
 
+There's one executable artifact and a few reference files. The prompt is what you actually run; everything else exists to support and evolve it.
+
 | Path | What it is |
 |------|------------|
-| [`SKILL.md`](SKILL.md) | The skill itself, framed as an agent skill (role, rubric, sources, output format). |
-| [`prompts/tier0-weekly-scan.md`](prompts/tier0-weekly-scan.md) | The runnable Tier 0 prompt. This is the current product: paste it into a browsing AI and run it weekly. |
-| [`rubric.md`](rubric.md) | The casting rubric as a standalone, editable spec. The part only you can author. |
+| [`prompts/tier0-weekly-scan.md`](prompts/tier0-weekly-scan.md) | **The runtime artifact.** Self-contained and canonical for a run: sources, the compact rubric, the gates, verification rules, exclusions, and the exact output format. Paste it in and run it weekly. |
+| [`rubric.md`](rubric.md) | The expanded rubric: scoring guide, gate logic, false-positive patterns, list-level diversity, and a worked example. The deeper companion to the compact rubric in the prompt. |
+| [`SKILL.md`](SKILL.md) | A thin agent-skill wrapper (frontmatter + when-to-use + non-negotiables) that points at the prompt and rubric rather than duplicating them. |
 | [`sources.md`](sources.md) | The source list with its 2026 access realities (what's free, what's blocked, what costs money). |
 | [`rolodex/`](rolodex/) | Persistent memory: the do-not-resurface list and the taste log that teach the tool your eye over time. |
 | [`roadmap.md`](roadmap.md) | The three-tier build path, so the prompt can grow into a scheduled pipeline later. |
@@ -28,11 +30,11 @@ The wide net is the easy part. What this skill is really for is **taste and judg
 
 You're at **Tier 0**: prompt-as-product, zero infrastructure.
 
-1. Open [`prompts/tier0-weekly-scan.md`](prompts/tier0-weekly-scan.md).
-2. Paste it into an AI assistant with live web search on, or a browsing agent that can reach the sources.
-3. Read the shortlist. After each run, edit the TUNING and TASTE LOG sections based on what it nailed and what it missed.
+1. Paste the current contents of [`rolodex/do-not-resurface.md`](rolodex/do-not-resurface.md) into the prompt's DO-NOT-RESURFACE block, and update its TUNING block.
+2. Paste [`prompts/tier0-weekly-scan.md`](prompts/tier0-weekly-scan.md) into an AI assistant with live web search on, or a browsing agent that can reach the sources.
+3. Read the shortlist. After each run, append a line to the prompt's TASTE LOG based on what it nailed and what it missed.
 
-Those edits are the real work. They calibrate the tool's taste. **Don't write a line of pipeline code until the rubric is stable** (see [`roadmap.md`](roadmap.md)).
+Those edits are the real work. They calibrate the tool's taste. **Don't write a line of pipeline code until the rubric is stable** (see [`roadmap.md`](roadmap.md)). The single source of truth for a run is the prompt; `rubric.md` is where stable lessons graduate, and the two stay in sync with a one-line update when something changes.
 
 ## The build path, in one breath
 

@@ -1,6 +1,8 @@
 # Do-not-resurface
 
-Anyone on this list is excluded from every scan: already surfaced, contacted, cast, or deliberately passed on. Keep it short and scannable. One row per person or project.
+The canonical list of people already surfaced, contacted, cast, or deliberately passed on. Anyone here is excluded from every scan. Keep it short and scannable, one row per person or project.
+
+**Tier 0 workflow:** before each run, copy this table into the DO-NOT-RESURFACE block of [`../prompts/tier0-weekly-scan.md`](../prompts/tier0-weekly-scan.md) so the pasted prompt can actually enforce it. (In Tier 1 a script reads this file directly as the dedupe "seen" set.)
 
 | Name / handle | Project | Status (surfaced / contacted / cast / passed) | Date | Note |
 |---------------|---------|-----------------------------------------------|------|------|
