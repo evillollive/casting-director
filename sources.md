@@ -12,10 +12,22 @@ The compact, runnable source list lives in [`prompts/tier0-weekly-scan.md`](prom
 
 - **Product Hunt, Lobsters, Dev.to, Indie Hackers, newsletters**: mostly RSS/Atom or simple APIs. Easy to bolt on once the core three are stable.
 
+## The wider net (why the core three are not enough)
+
+The core three are a launch detector. They over-represent English-speaking, US-centric, HN-fluent developers shipping software with a launch post. Everything below exists to correct a specific blind spot, and it is worth rotating through two or three each week rather than trying to cover them all.
+
+- **Makers and hardware**: [Hackaday](https://hackaday.com) (RSS, generous), Hackaday.io project pages, [Tindie](https://www.tindie.com) (people selling what they built), Kickstarter. Blind spot: physical builds, which film better than anything on a screen and rarely reach Show HN.
+- **Games and jams**: [itch.io](https://itch.io) (RSS and an API), Ludum Dare, Devpost and other hackathon writeups. Blind spot: work with a built-in deadline, an arc, and a playable demo.
+- **Video and streams**: YouTube devlogs (RSS per channel, free), Twitch coding streams, conference talk uploads. Blind spot: on-camera evidence. This is the only source family that lets you audition someone before you contact them, which is worth more than any README.
+- **Open social**: Mastodon (public timelines and per-instance RSS, no auth) and Bluesky (a free, well-documented public API). Blind spot: the build-in-public crowd that left the platform in "The painful one" below, at a fraction of the cost.
+- **Beyond English**: developer communities writing in Chinese, Japanese, Portuguese, Spanish, Hindi, Bahasa and more, including regional aggregators and local GitHub scenes. Translate rather than skip. Blind spot: the largest one on this page, and the one most likely to hand you a story nobody else has.
+- **Science, civic and accessibility**: research code released alongside a paper, civic-tech volunteer projects, accessibility tooling built by the people who need it. Blind spot: slow work with strong arcs and real stakes, which never trends.
+- **Self-hosted and homelab**: r/selfhosted, r/homelab, r/raspberry_pi. Blind spot: people whose projects live in a rack in a spare room, which is a set.
+
 ## The painful one
 
 - **X**: the free tier is discontinued and the old flat $200 Basic / $5,000 Pro tiers are closed to new signups. New developers get pay-per-use at $0.005 per read, capped at 2 million reads/month. For an internal tool, either skip the X API, eyeball it through a browsing agent, or route through a third-party read API (around $0.15 per 1,000 tweets). Don't burn effort here if it's blocked.
 
 ## A note on access and privacy
 
-Every source here is public by design. Keep it that way: pull only public posts and profiles, respect each platform's rate limits and terms, and never route anything sensitive through a third-party tool. For public-web casting that's not much of a constraint, but the rule still holds because the output is about real people. See the consent guardrail in [`SKILL.md`](SKILL.md).
+Every source here is public by design. Keep it that way: pull only public posts and profiles, respect each platform's rate limits and terms, and never route anything sensitive through a third-party tool. For public-web casting that's not much of a constraint, but the rule still holds because the output is about real people. The judgment half of that, who should not be surfaced at all and what counts as a non-invasive contact path, lives in the "Consent and care" section of [`rubric.md`](rubric.md), with the guardrail summarised in [`SKILL.md`](SKILL.md).

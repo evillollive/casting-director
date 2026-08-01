@@ -22,6 +22,7 @@ import os
 import re
 import sys
 from dataclasses import dataclass, field, asdict
+from datetime import date, timedelta
 from typing import Optional
 
 ERROR = "error"
@@ -39,14 +40,20 @@ FIELD_LABELS = {
     "arc": ["arc"],
     "reach": ["reach"],
     "caveat": ["caveat"],
+    "sensitivity": ["sensitivity"],
     "score": ["score"],
     "source": ["source link", "source"],
 }
 
 URL_RE = re.compile(r"https?://[^\s)>\]]+")
 ISO_DATE_RE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
-OVERALL_RE = re.compile(r"\b([0-5])\s*/\s*5\b")
+# "4.5/5" must not read as an overall of 5, so refuse a preceding digit or dot.
+OVERALL_RE = re.compile(r"(?<![\d.])([0-5])\s*/\s*5\b")
 DIMS = ["p", "hook", "now", "voice", "arc", "reach"]
+
+# How far past the ~7 day window a dated "why now" can sit before it stops
+# being a reason to tell the story *this* week.
+STALE_DAYS = 14
 
 REFUSAL_SIGNALS = [
     "stopping rather than",
@@ -82,7 +89,85 @@ CORPORATE_SIGNALS = [
     " gmbh",
 ]
 
-DIVERSITY_ACK = ["cluster", "all from", "same source", "monotone", "lean", "spread", "skew", "swap"]
+# Acknowledging a cluster means naming it. Generic praise ("good spread across
+# sources") is exactly the boilerplate the check exists to catch, so only words
+# that admit clustering count, plus naming the clustered source itself.
+DIVERSITY_ACK = ["cluster", "all from", "same source", "monotone", "skew", "swap", "over-index"]
+
+# A source URL's host tells you where the candidate was found. A repo host does
+# not: almost every candidate links a repo, so counting raw domains would call
+# any list "varied". These are folded into feeds, and repo hosts are generic.
+FEEDS = {
+    "news.ycombinator.com": "Hacker News",
+    "hn.algolia.com": "Hacker News",
+    "reddit.com": "Reddit",
+    "redd.it": "Reddit",
+    "producthunt.com": "Product Hunt",
+    "lobste.rs": "Lobsters",
+    "dev.to": "Dev.to",
+    "indiehackers.com": "Indie Hackers",
+    "hackaday.com": "Hackaday",
+    "hackaday.io": "Hackaday",
+    "itch.io": "itch.io",
+    "devpost.com": "Devpost",
+    "kickstarter.com": "Kickstarter",
+    "tindie.com": "Tindie",
+    "youtube.com": "YouTube",
+    "youtu.be": "YouTube",
+    "twitch.tv": "Twitch",
+    "bsky.app": "Bluesky",
+    "mastodon.social": "Mastodon",
+    "fosstodon.org": "Mastodon",
+    "x.com": "X",
+    "twitter.com": "X",
+    "github.com": "GitHub",
+    "gist.github.com": "GitHub",
+    "github.blog": "GitHub",
+    "gitlab.com": "GitLab",
+    "codeberg.org": "Codeberg",
+    "sourcehut.org": "sourcehut",
+}
+# Code hosts: where the work lives, not where you found the person.
+GENERIC_FEEDS = {"GitHub", "GitLab", "Codeberg", "sourcehut"}
+# The rubric flags a cluster at three or more entries from one source.
+CLUSTER_MIN = 3
+
+# Surfacing a minor is a different decision from surfacing an adult, so it has
+# to be named in the brief rather than discovered during outreach.
+MINOR_RE = re.compile(
+    r"\b(?:1[0-7]\s*[- ]?\s*year[- ]?old|high[- ]school(?:er)?|teenager|teenage|"
+    r"under\s*18|underage|schoolkid|middle[- ]school)\b",
+    re.IGNORECASE,
+)
+MINOR_ACK = ["minor", "age", "guardian", "parent", "consent", "under 18", "school"]
+
+# Contact paths must be public and non-invasive.
+INVASIVE_SIGNALS = [
+    "phone number",
+    "home address",
+    "personal phone",
+    "cell number",
+    "mobile number",
+    "employer email",
+    "work email",
+    "home email",
+    "family member",
+    "school address",
+]
+PHONE_RE = re.compile(
+    r"(?<![\w])(?:\+\d{1,3}[\s.-]?)?(?:\(\d{2,4}\)\s*|\d{2,4}[\s.-])\d{2,4}[\s.-]?\d{2,4}(?![\w])"
+)
+
+# Field bullets look like: - **Label:** value
+FIELD_LINE_RE = re.compile(r"^\s*[-*]\s*\*\*(?P<label>[^*]+?):?\*\*\s*(?P<value>.*)$")
+HEADER_RE = re.compile(r"^\s*#{1,6}\s")
+PARKING_HEADER_RE = re.compile(r"^\s*#{1,6}\s*parking\b", re.IGNORECASE)
+# "Shortlist check" is a report section, not more candidates, so it must be
+# tested before the plain "Shortlist" header.
+CHECK_HEADER_RE = re.compile(
+    r"^\s*#{1,6}\s*(?:shortlist check|list check|notes|taste log|tuning)\b", re.IGNORECASE
+)
+SHORTLIST_HEADER_RE = re.compile(r"^\s*#{1,6}\s*shortlist\b", re.IGNORECASE)
 
 
 @dataclass
@@ -112,18 +197,35 @@ def _label_to_key(label: str) -> Optional[str]:
     return None
 
 
-def parse_entries(text: str) -> list[Entry]:
-    """Split the shortlist into entries, keyed on the Name / handle line."""
-    lines = text.splitlines()
+def split_sections(text: str) -> dict:
+    """Split a run into 'shortlist', 'parking' and 'other' line groups.
+
+    Without this, a parking lot written with the same bold-label template parses
+    as extra shortlist entries: false missing-field errors and a false size
+    violation for names that were never shortlisted.
+    """
+    out = {"shortlist": [], "parking": [], "other": []}
+    section = "shortlist"
+    for line in text.splitlines():
+        if HEADER_RE.match(line):
+            if PARKING_HEADER_RE.match(line):
+                section = "parking"
+            elif CHECK_HEADER_RE.match(line):
+                section = "other"
+            elif SHORTLIST_HEADER_RE.match(line):
+                section = "shortlist"
+        out[section].append(line)
+    return out
+
+
+def _parse_entry_lines(lines: list[str]) -> list["Entry"]:
     entries: list[Entry] = []
     current: Optional[Entry] = None
-    # A field bullet looks like: - **Label:** value   (label may contain notes)
-    field_re = re.compile(r"^\s*[-*]\s*\*\*(?P<label>[^*]+?):?\*\*\s*(?P<value>.*)$")
     for line in lines:
-        m = field_re.match(line)
+        m = FIELD_LINE_RE.match(line)
         if not m:
             # Stop an entry when we hit a section header after it started.
-            if current is not None and re.match(r"^\s*#{1,6}\s", line):
+            if current is not None and HEADER_RE.match(line):
                 entries.append(current)
                 current = None
             continue
@@ -141,6 +243,21 @@ def parse_entries(text: str) -> list[Entry]:
     if current is not None:
         entries.append(current)
     return entries
+
+
+def parse_entries(text: str) -> list["Entry"]:
+    """Parse the shortlist entries only, keyed on the Name / handle line."""
+    return _parse_entry_lines(split_sections(text)["shortlist"])
+
+
+def narrative_text(text: str) -> str:
+    """The prose of a run, with candidate field bullets removed.
+
+    Refusal detection reads this rather than the raw text. A brief for an
+    offline-first project ("works without internet access") otherwise trips the
+    refusal regex and voids the entire run.
+    """
+    return "\n".join(line for line in text.splitlines() if not FIELD_LINE_RE.match(line))
 
 
 def parse_dnr_names(dnr_text: str) -> list[str]:
@@ -167,16 +284,86 @@ def parse_dnr_names(dnr_text: str) -> list[str]:
     return names
 
 
+def normalize_dnr_name(name: str) -> str:
+    """Reduce a rolodex cell to a comparable token.
+
+    '@octocat', 'https://github.com/octocat' and 'octocat' are the same person,
+    and the table is hand-typed, so whitespace is collapsed too.
+    """
+    n = (name or "").strip().lower()
+    n = re.sub(r"^https?://", "", n)
+    n = re.sub(r"^(?:www\.)?(?:github|gitlab|codeberg)\.com/", "", n)
+    n = n.lstrip("@").strip().strip("/")
+    return re.sub(r"\s+", " ", n)
+
+
+def dnr_matches(haystack: str, dnr_names: list[str]) -> list[str]:
+    """Which do-not-resurface entries genuinely appear in this text.
+
+    Matching is bounded, not substring: a rolodex entry for 'ai' must not veto
+    'Aisha', and very short tokens are ignored entirely because they cannot be
+    identifying.
+    """
+    hay = re.sub(r"\s+", " ", (haystack or "").lower())
+    hits: list[str] = []
+    for raw in dnr_names:
+        needle = normalize_dnr_name(raw)
+        if len(needle) < 3:
+            continue
+        if re.search(r"(?<![a-z0-9])" + re.escape(needle) + r"(?![a-z0-9])", hay):
+            hits.append(raw)
+    return hits
+
+
 def _domain(url: str) -> str:
     m = re.match(r"https?://([^/]+)/?", url)
     return m.group(1).lower().replace("www.", "") if m else url.lower()
 
 
+def _feed(url: str) -> str:
+    """Map a URL to the feed it represents, falling back to its domain."""
+    domain = _domain(url)
+    for host, name in FEEDS.items():
+        if domain == host or domain.endswith("." + host):
+            return name
+    return domain
+
+
+def entry_feed(urls: list[str]) -> Optional[str]:
+    """The feed an entry was sourced from: the first non-repo host if there is
+    one, since a repo link says where the code lives, not where you found them."""
+    feeds = [_feed(u) for u in urls]
+    for f in feeds:
+        if f not in GENERIC_FEEDS:
+            return f
+    return feeds[0] if feeds else None
+
+
+def iso_dates(value: str) -> list[date]:
+    out: list[date] = []
+    for m in ISO_DATE_RE.findall(value or ""):
+        try:
+            out.append(date.fromisoformat(m))
+        except ValueError:
+            continue
+    return out
+
+
+def _coerce_date(value) -> Optional[date]:
+    if value is None or isinstance(value, date):
+        return value
+    try:
+        return date.fromisoformat(str(value))
+    except ValueError:
+        return None
+
+
 def is_refusal(text: str) -> bool:
-    low = text.lower()
+    narrative = narrative_text(text)
+    low = narrative.lower()
     if any(sig in low for sig in REFUSAL_SIGNALS):
         return True
-    return bool(REFUSAL_RE.search(text))
+    return bool(REFUSAL_RE.search(narrative))
 
 
 def parse_score_tuple(score_text: str) -> dict:
@@ -197,10 +384,18 @@ def _shortlist_check_text(text: str) -> str:
     return m.group(1).lower() if m else ""
 
 
-def evaluate(text: str, dnr_names: Optional[list[str]] = None, live: bool = False) -> list[Violation]:
+def evaluate(
+    text: str,
+    dnr_names: Optional[list[str]] = None,
+    live: bool = False,
+    as_of=None,
+) -> list[Violation]:
+    """Lint a run. Pass as_of (a date or YYYY-MM-DD) to also check recency."""
     dnr_names = dnr_names or []
+    as_of_date = _coerce_date(as_of)
     violations: list[Violation] = []
-    entries = parse_entries(text)
+    sections = split_sections(text)
+    entries = _parse_entry_lines(sections["shortlist"])
 
     if is_refusal(text):
         if entries:
@@ -226,7 +421,16 @@ def evaluate(text: str, dnr_names: Optional[list[str]] = None, live: bool = Fals
             Violation("SHORTLIST_SIZE", WARN, f"Shortlist has {n} entries (<5) with no 'quiet week' justification.")
         )
 
-    domains: list[str] = []
+    seen_names: set[str] = set()
+    for e in entries:
+        key = re.sub(r"\s+", " ", e.name.strip().lower())
+        if key and key in seen_names:
+            violations.append(
+                Violation("DUPLICATE_ENTRY", ERROR, "This candidate appears more than once in the shortlist.", e.name)
+            )
+        seen_names.add(key)
+
+    feeds: list[str] = []
     for e in entries:
         label = e.name or "(unnamed)"
         for fkey in REQUIRED_FIELDS:
@@ -239,8 +443,9 @@ def evaluate(text: str, dnr_names: Optional[list[str]] = None, live: bool = Fals
             violations.append(
                 Violation("NO_SOURCE_URL", ERROR, "No source URL. Every candidate needs a live link opened this run.", label)
             )
-        if src_urls:
-            domains.append(_domain(src_urls[0]))
+        feed = entry_feed(src_urls)
+        if feed:
+            feeds.append(feed)
 
         # Why now: dated within reason, or explicitly evergreen.
         why = e.get("why_now").lower()
@@ -248,6 +453,23 @@ def evaluate(text: str, dnr_names: Optional[list[str]] = None, live: bool = Fals
             violations.append(
                 Violation("UNDATED_WHY_NOW", ERROR, "'Why now' has no date and is not labeled evergreen.", label)
             )
+        if as_of_date is not None:
+            dates = iso_dates(e.get("why_now"))
+            if dates:
+                newest = max(dates)
+                if newest > as_of_date:
+                    violations.append(
+                        Violation("FUTURE_WHY_NOW", WARN, f"'Why now' is dated {newest.isoformat()}, after the run date.", label)
+                    )
+                elif newest < as_of_date - timedelta(days=STALE_DAYS):
+                    violations.append(
+                        Violation(
+                            "STALE_WHY_NOW",
+                            WARN,
+                            f"'Why now' is dated {newest.isoformat()}, outside the ~7 day window. It is a reason, but not a reason this week.",
+                            label,
+                        )
+                    )
 
         # Score tuple + gates.
         scores = parse_score_tuple(e.get("score"))
@@ -269,33 +491,64 @@ def evaluate(text: str, dnr_names: Optional[list[str]] = None, live: bool = Fals
                 )
 
         # Do-not-resurface.
-        hay = f"{e.get('name')} {e.get('project')}".lower()
-        for bad in dnr_names:
-            if bad and bad in hay:
-                violations.append(
-                    Violation("RESURFACED", ERROR, f"Matches do-not-resurface entry '{bad}'.", label)
-                )
+        hay = f"{e.get('name')} {e.get('project')}"
+        for bad in dnr_matches(hay, dnr_names):
+            violations.append(Violation("RESURFACED", ERROR, f"Matches do-not-resurface entry '{bad}'.", label))
 
         # Corporate / VC false positive not acknowledged in a caveat.
         blob = e.raw.lower()
-        caveat = e.get("caveat").lower()
+        caveat = f"{e.get('caveat')} {e.get('sensitivity')}".lower()
         hit = next((s for s in CORPORATE_SIGNALS if s in blob), None)
         if hit and hit not in caveat and "corporate" not in caveat and "vc" not in caveat and "funded" not in caveat:
             violations.append(
                 Violation("CORPORATE_FALSE_POSITIVE", WARN, f"Looks funded/corporate ('{hit.strip()}') with no caveat.", label)
             )
 
-    # Diversity: a one-source shortlist must be acknowledged in the check line.
-    uniq = set(d for d in domains if d)
-    if len(domains) >= 3 and len(uniq) == 1:
-        if not any(w in _shortlist_check_text(text) for w in DIVERSITY_ACK):
+        # Consent surface: a likely minor, and invasive contact paths.
+        if MINOR_RE.search(e.raw) and not any(a in caveat for a in MINOR_ACK):
             violations.append(
                 Violation(
-                    "MONOTONE_SHORTLIST",
+                    "MINOR_SUBJECT",
                     WARN,
-                    f"All {len(domains)} entries share one source ({next(iter(uniq))}) and the shortlist check doesn't flag it.",
+                    "Reads as a minor with no caveat. Filming a minor needs a guardian, so say so in the brief.",
+                    label,
                 )
             )
+        reach_prose = ISO_DATE_RE.sub(" ", URL_RE.sub(" ", e.get("reach")))
+        invasive = next((s for s in INVASIVE_SIGNALS if s in reach_prose.lower()), None)
+        if invasive or PHONE_RE.search(reach_prose):
+            violations.append(
+                Violation(
+                    "INVASIVE_CONTACT",
+                    WARN,
+                    f"Contact path looks invasive ({invasive or 'a phone number'}). Use public, non-invasive paths only.",
+                    label,
+                )
+            )
+
+    # Diversity: a clustered shortlist must be acknowledged in the check line.
+    if feeds:
+        counts: dict[str, int] = {}
+        for f in feeds:
+            counts[f] = counts.get(f, 0) + 1
+        top = max(counts, key=lambda k: (counts[k], k))
+        if counts[top] >= CLUSTER_MIN:
+            check = _shortlist_check_text(text)
+            if not (any(w in check for w in DIVERSITY_ACK) or top.lower() in check):
+                violations.append(
+                    Violation(
+                        "MONOTONE_SHORTLIST",
+                        WARN,
+                        f"{counts[top]} of {len(entries)} entries come from one source ({top}) and the shortlist check doesn't flag it.",
+                    )
+                )
+
+    # The do-not-resurface list is an exclusion, so parking someone still breaks it.
+    parking = "\n".join(sections["parking"])
+    for bad in dnr_matches(parking, dnr_names):
+        violations.append(
+            Violation("RESURFACED_PARKING", WARN, f"Parking lot names do-not-resurface entry '{bad}'.")
+        )
 
     if live:
         violations.extend(_check_live_urls(entries))
@@ -309,12 +562,24 @@ def _check_live_urls(entries: list[Entry]) -> list[Violation]:
     out: list[Violation] = []
     for e in entries:
         for url in URL_RE.findall(e.get("source")):
-            req = urllib.request.Request(url, method="HEAD", headers={"User-Agent": "casting-eval/1.0"})
-            try:
-                urllib.request.urlopen(req, timeout=10)
-            except Exception as exc:  # noqa: BLE001 - network is best-effort
-                out.append(Violation("DEAD_SOURCE_URL", ERROR, f"Source URL did not resolve: {url} ({exc}).", e.name))
+            if not _resolves(urllib.request, url, "HEAD") and not _resolves(urllib.request, url, "GET"):
+                out.append(Violation("DEAD_SOURCE_URL", ERROR, f"Source URL did not resolve: {url}.", e.name))
     return out
+
+
+def _resolves(urllib_request, url: str, method: str) -> bool:
+    """Try one request. Many sources reject HEAD or a bot user agent, so a
+    failed HEAD is retried as a GET before a URL is called dead."""
+    req = urllib_request.Request(
+        url,
+        method=method,
+        headers={"User-Agent": "Mozilla/5.0 (compatible; casting-eval/1.0)", "Accept": "*/*"},
+    )
+    try:
+        urllib_request.urlopen(req, timeout=10)
+        return True
+    except Exception:  # noqa: BLE001 - network is best-effort
+        return False
 
 
 def has_errors(violations: list[Violation]) -> bool:
@@ -340,13 +605,20 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap.add_argument("--dnr", help="Path to rolodex/do-not-resurface.md", default=None)
     ap.add_argument("--json", action="store_true", help="Emit violations as JSON.")
     ap.add_argument("--live", action="store_true", help="Also resolve source URLs over the network.")
+    ap.add_argument(
+        "--asof",
+        default=None,
+        help="Run date (YYYY-MM-DD) for the recency check. Defaults to today; use --no-recency to skip.",
+    )
+    ap.add_argument("--no-recency", action="store_true", help="Skip the 'why now' recency check.")
     args = ap.parse_args(argv)
 
     text = open(args.run, encoding="utf-8").read()
     dnr_names = parse_dnr_names(open(args.dnr, encoding="utf-8").read()) if args.dnr else []
     live = args.live or os.environ.get("CASTING_EVAL_LIVE") == "1"
+    as_of = None if args.no_recency else (args.asof or date.today())
 
-    violations = evaluate(text, dnr_names=dnr_names, live=live)
+    violations = evaluate(text, dnr_names=dnr_names, live=live, as_of=as_of)
     if args.json:
         print(json.dumps([asdict(v) for v in violations], indent=2))
     else:

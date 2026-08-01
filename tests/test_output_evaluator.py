@@ -89,6 +89,79 @@ def test_corporate_false_positive_warns():
     assert not ce.has_errors(v)
 
 
+# --- Regressions: things that used to be flagged wrongly, or not at all ---
+
+
+def test_offline_project_is_not_read_as_a_refusal():
+    # "works without internet access" describes the project, not the assistant.
+    # It used to void the whole run as a refusal and skip every other check.
+    v = run("run_offline_project.md")
+    assert v == [], f"an offline-first project should lint clean, got {ce.format_report(v)}"
+    text = (FIXTURES / "run_offline_project.md").read_text(encoding="utf-8")
+    assert not ce.is_refusal(text)
+
+
+def test_parking_lot_entries_are_not_shortlist_entries():
+    text = (FIXTURES / "run_parking_lot.md").read_text(encoding="utf-8")
+    assert len(ce.parse_entries(text)) == 3
+    v = run("run_parking_lot.md")
+    assert "MISSING_FIELD" not in codes(v)
+    assert not ce.has_errors(v)
+
+
+def test_do_not_resurface_applies_to_the_parking_lot_too():
+    v = run("run_parking_lot.md")
+    assert "RESURFACED_PARKING" in codes(v)
+
+
+def test_cluster_of_three_from_one_source_warns():
+    # The rubric flags 3+ from one source, and generic praise is not a flag.
+    v = run("run_cluster.md")
+    assert "MONOTONE_SHORTLIST" in codes(v)
+    assert not ce.has_errors(v)
+
+
+def test_naming_the_cluster_satisfies_the_check():
+    text = (FIXTURES / "run_cluster.md").read_text(encoding="utf-8")
+    named = text.replace(
+        "Good spread of project types this week.",
+        "All three are from Hacker News; justified, that is where the week happened.",
+    )
+    assert "MONOTONE_SHORTLIST" not in codes(ce.evaluate(named))
+
+
+def test_duplicate_candidate_is_an_error():
+    v = run("run_duplicate.md")
+    assert "DUPLICATE_ENTRY" in codes(v)
+    assert ce.has_errors(v)
+
+
+def test_sensitivity_checks_flag_minors_and_invasive_contact():
+    v = run("run_sensitive.md")
+    assert "MINOR_SUBJECT" in codes(v)
+    assert "INVASIVE_CONTACT" in codes(v)
+    # An acknowledged minor is handled, not flagged.
+    assert [x.entry for x in v if x.code == "MINOR_SUBJECT"] == ["Milo Fenn (@mfenn)"]
+    assert not ce.has_errors(v)
+
+
+def test_recency_is_off_until_a_run_date_is_given():
+    assert run("run_stale.md") == []
+
+
+def test_recency_flags_stale_and_future_why_now():
+    text = (FIXTURES / "run_stale.md").read_text(encoding="utf-8")
+    c = codes(ce.evaluate(text, as_of="2026-06-08"))
+    assert "STALE_WHY_NOW" in c
+    assert "FUTURE_WHY_NOW" in c
+    assert not ce.has_errors(ce.evaluate(text, as_of="2026-06-08"))
+
+
+def test_recency_accepts_a_date_inside_the_window():
+    text = (FIXTURES / "run_good.md").read_text(encoding="utf-8")
+    assert codes(ce.evaluate(text, as_of="2026-06-08")) == set()
+
+
 # --- Unit tests on the evaluator's building blocks ---
 
 
@@ -136,3 +209,32 @@ def test_entry_parser_counts_entries():
     assert len(entries) == 5
     assert entries[0].get("name").startswith("Jane Okoro")
     assert "github.com" in entries[1].get("reach")
+
+
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ("@octocat", "octocat"),
+        ("https://github.com/octocat", "octocat"),
+        ("  Jordan   Blake ", "jordan blake"),
+    ],
+)
+def test_dnr_name_normalization(raw, expected):
+    assert ce.normalize_dnr_name(raw) == expected
+
+
+def test_dnr_matching_is_bounded_not_substring():
+    # 'ai' must not veto 'Aisha'; a real token still matches, including handles.
+    assert ce.dnr_matches("Aisha Bello (@abello) a tree map", ["ai"]) == []
+    assert ce.dnr_matches("Tom Vesely (@tvesely) a regex game", ["tom"]) == ["tom"]
+    assert ce.dnr_matches("Jane Okoro (@jokoro) a git timeline", ["@jokoro"]) == ["@jokoro"]
+
+
+def test_overall_score_ignores_a_decimal():
+    assert "overall" not in ce.parse_score_tuple("4.5/5 (P4 / Hook4 / Now4 / Voice4 / Arc4 / Reach4)")
+
+
+def test_entry_feed_prefers_the_feed_over_the_repo_host():
+    assert ce.entry_feed(["https://github.com/a/b", "https://news.ycombinator.com/item?id=1"]) == "Hacker News"
+    assert ce.entry_feed(["https://github.com/a/b"]) == "GitHub"
+    assert ce.entry_feed([]) is None

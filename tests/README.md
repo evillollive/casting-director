@@ -28,11 +28,29 @@ Deterministic checks that the repo stays internally consistent and policy-clean:
 | `GATE_PROTAGONIST` / `GATE_HOOK` | error | Shortlisted despite failing a gate (score < 3). |
 | `RESURFACED` | error | A candidate is on the do-not-resurface list. |
 | `SHORTLIST_SIZE` | error/warn | More than 8, or fewer than 5 without a "quiet week" note. |
-| `MONOTONE_SHORTLIST` | warn | All entries from one source, unacknowledged. |
+| `MONOTONE_SHORTLIST` | warn | 3 or more entries from one feed, unacknowledged. |
+| `DUPLICATE_ENTRY` | error | The same person or project appears twice on one shortlist. |
+| `STALE_WHY_NOW` / `FUTURE_WHY_NOW` | warn | The "why now" date is outside the ~7 day window, or in the future. |
+| `MINOR_SUBJECT` | warn | The brief describes a minor with no `Sensitivity` note. |
+| `INVASIVE_CONTACT` | warn | The reach field carries a phone number, home address, or personal email. |
+| `RESURFACED_PARKING` | warn | A do-not-resurface name reappears in the parking lot. |
 | `CORPORATE_FALSE_POSITIVE` | warn | Looks funded/corporate with no caveat. |
 | `DEAD_SOURCE_URL` | error | (Live mode only) a source URL didn't resolve. |
 
-The fixtures in `fixtures/` are simulated run outputs, each engineered to trigger one category (or none, for `run_good.md`). The tests assert the evaluator flags exactly what it should.
+The recency checks are opt-in in the library (`evaluate(text, as_of=...)`) so the
+fixtures stay deterministic; the CLI and the browser app both pass today's date.
+
+The fixtures in `fixtures/` are simulated run outputs, each engineered to trigger one category (or none, for `run_good.md` and `run_offline_project.md`). The tests assert the evaluator flags exactly what it should.
+
+| Fixture | What it exercises |
+|---------|-------------------|
+| `run_good.md` | A clean run: passes every check. |
+| `run_offline_project.md` | A candidate whose *project* works offline. Must not read as the assistant refusing for lack of web access. |
+| `run_cluster.md` | Three entries from one feed, with a boilerplate diversity line that must not count as acknowledgment. |
+| `run_parking_lot.md` | A parking lot using the same template as the shortlist. Must not parse as extra candidates, but is still checked against the do-not-resurface list. |
+| `run_sensitive.md` | A minor and a private phone number, plus a third entry whose `Sensitivity` line correctly clears it. |
+| `run_duplicate.md` | The same person listed twice. |
+| `run_stale.md` | Clean without `as_of`; stale and future-dated with it. |
 
 ## Running
 
