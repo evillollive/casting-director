@@ -23,6 +23,7 @@ import re
 import sys
 from dataclasses import dataclass, field, asdict
 from datetime import date, timedelta
+from functools import lru_cache
 from typing import Optional
 
 ERROR = "error"
@@ -297,6 +298,20 @@ def normalize_dnr_name(name: str) -> str:
     return re.sub(r"\s+", " ", n)
 
 
+@lru_cache(maxsize=4096)
+def _dnr_pattern(raw: str):
+    """The compiled bounded matcher for one rolodex cell, or None if unusable.
+
+    dnr_matches runs once per shortlist entry, so without this the same handful
+    of names is re-normalized and re-escaped into a fresh pattern for every
+    entry: the dominant cost of a run once a rolodex has a few hundred rows.
+    """
+    needle = normalize_dnr_name(raw)
+    if len(needle) < 3:
+        return None
+    return re.compile(r"(?<![a-z0-9])" + re.escape(needle) + r"(?![a-z0-9])")
+
+
 def dnr_matches(haystack: str, dnr_names: list[str]) -> list[str]:
     """Which do-not-resurface entries genuinely appear in this text.
 
@@ -307,10 +322,8 @@ def dnr_matches(haystack: str, dnr_names: list[str]) -> list[str]:
     hay = re.sub(r"\s+", " ", (haystack or "").lower())
     hits: list[str] = []
     for raw in dnr_names:
-        needle = normalize_dnr_name(raw)
-        if len(needle) < 3:
-            continue
-        if re.search(r"(?<![a-z0-9])" + re.escape(needle) + r"(?![a-z0-9])", hay):
+        pattern = _dnr_pattern(raw)
+        if pattern is not None and pattern.search(hay):
             hits.append(raw)
     return hits
 
