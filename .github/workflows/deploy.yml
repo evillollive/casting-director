@@ -1,0 +1,74 @@
+name: Release and deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write # create tags and releases
+  pages: write
+  id-token: write
+
+concurrency:
+  group: release-deploy
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.compute.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Auto release
+        id: compute
+        uses: ./.github/actions/auto-release
+
+  deploy:
+    needs: release
+    if: needs.release.outputs.version != 'NONE'
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Sync bundled web content
+        run: python tools/sync_web_content.py
+
+      - name: Stamp version
+        run: |
+          git fetch --tags --force >/dev/null 2>&1 || true
+          VERSION="$(git describe --tags --always --dirty 2>/dev/null || echo dev)"
+          SHA="$(git rev-parse --short HEAD)"
+          DATE="$(date -u +%Y-%m-%d)"
+          printf 'window.__APP_VERSION__ = "%s (%s · %s)";\n' "$VERSION" "$SHA" "$DATE" > web/version.js
+          echo "Stamped version.js -> $(cat web/version.js)"
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

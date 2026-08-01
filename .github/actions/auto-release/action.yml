@@ -1,0 +1,64 @@
+name: Auto Release
+description: >-
+  Compute the next semantic version from Conventional Commits since the last
+  tag, then (optionally) create the git tag and a GitHub Release. Outputs the
+  version so later jobs/steps (e.g. a deploy) can stamp it.
+
+inputs:
+  create-release:
+    description: "Create the git tag and GitHub Release. Set to 'false' to only compute the next version."
+    required: false
+    default: "true"
+  generate-notes:
+    description: "Auto-generate release notes from commits/PRs."
+    required: false
+    default: "true"
+  github-token:
+    description: "Token used to push the tag and create the release. Defaults to the workflow token."
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  version:
+    description: "The computed version (e.g. v1.4.0), or 'NONE' when there are no new commits."
+    value: ${{ steps.compute.outputs.version }}
+  released:
+    description: "'true' when a new tag/release was created, otherwise 'false'."
+    value: ${{ steps.release.outputs.released }}
+
+runs:
+  using: composite
+  steps:
+    - name: Compute next version
+      id: compute
+      shell: bash
+      run: |
+        VERSION="$(bash "${{ github.action_path }}/next-version.sh")"
+        echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+        echo "Next version: $VERSION"
+
+    - name: Create tag and release
+      id: release
+      if: inputs.create-release == 'true' && steps.compute.outputs.version != 'NONE'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        VERSION: ${{ steps.compute.outputs.version }}
+        GENERATE_NOTES: ${{ inputs.generate-notes }}
+      run: |
+        set -euo pipefail
+        if git rev-parse "$VERSION" >/dev/null 2>&1; then
+          echo "Tag $VERSION already exists; skipping."
+          echo "released=false" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        git config user.name "github-actions[bot]"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        git tag -a "$VERSION" -m "$VERSION"
+        git push origin "$VERSION"
+        if [ "$GENERATE_NOTES" = "true" ]; then
+          gh release create "$VERSION" --title "$VERSION" --generate-notes
+        else
+          gh release create "$VERSION" --title "$VERSION" --notes "Release $VERSION"
+        fi
+        echo "released=true" >> "$GITHUB_OUTPUT"

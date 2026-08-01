@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 64" role="img" aria-label="casting-director">
+  <g fill="none">
+    <rect x="4" y="18" width="34" height="24" rx="3" fill="#ffffff"/>
+    <circle cx="21" cy="30" r="6" fill="#ffd400"/>
+    <rect x="16" y="11" width="10" height="6" rx="2" fill="#ffffff"/>
+  </g>
+  <text x="48" y="39" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="700" fill="#ffffff">casting-director</text>
+</svg>

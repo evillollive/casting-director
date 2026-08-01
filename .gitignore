@@ -20,3 +20,6 @@ node_modules/
 
 # pytest
 .pytest_cache/
+
+# Playwright / local web test artifacts
+.playwright-mcp/
