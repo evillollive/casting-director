@@ -14,7 +14,7 @@
 
 # casting-director
 
-**Cast stories, not link dumps.** An agentic AI skill that hands you a short ranked list of **people worth a conversation**: the hook for each, why they'd be good on camera, and how to reach them. It doesn't hand you "40 trending repos."
+**Cast stories, not link slop.** An agentic AI skill that hands you a short ranked list of **people worth a conversation**: the hook for each, why they'd be good on camera, and how to reach them. It doesn't hand you "40 trending repos."
 
 <p align="center">
   <img src="docs/assets/demo-preview.svg" alt="A wide net of developer feeds screened into a short ranked shortlist" width="900">
