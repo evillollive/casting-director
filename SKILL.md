@@ -1,7 +1,7 @@
 ---
 name: casting-director
 description: >-
-  Casts GitHub stories for video. Scans developer feeds (Hacker News, GitHub,
+  Casts stories for video. Scans developer feeds (Hacker News, GitHub,
   Reddit, and more) for the last ~7 days, scores candidates against a casting
   rubric, and returns a ranked shortlist of casting briefs plus a parking lot of
   "maybes." Use when you need to find individual developers or tiny teams worth
