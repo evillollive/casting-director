@@ -255,6 +255,23 @@
     return false;
   }
 
+  const _dnrNeedleCache = new Map();
+
+  /* The normalized needle for one rolodex cell, memoized. dnrMatches runs once
+   * per shortlist entry, so without this the same names are re-normalized for
+   * every entry. Mirrors _dnr_pattern in casting_eval.py. */
+  function _dnrNeedle(raw) {
+    const key = String(raw);
+    let needle = _dnrNeedleCache.get(key);
+    if (needle === undefined) {
+      // Bound the cache the way the Python side's lru_cache(maxsize=4096) is.
+      if (_dnrNeedleCache.size >= 4096) _dnrNeedleCache.clear();
+      needle = normalizeDnrName(raw);
+      _dnrNeedleCache.set(key, needle);
+    }
+    return needle;
+  }
+
   /* Which do-not-resurface entries genuinely appear in this text. Matching is
    * bounded, not substring: a rolodex entry for 'ai' must not veto 'Aisha', and
    * very short tokens are ignored because they cannot be identifying. */
@@ -262,7 +279,7 @@
     const hay = String(haystack || "").toLowerCase().replace(/\s+/g, " ");
     const hits = [];
     for (const raw of dnrNames || []) {
-      const needle = normalizeDnrName(raw);
+      const needle = _dnrNeedle(raw);
       if (needle.length < 3) continue;
       if (_boundedIncludes(hay, needle)) hits.push(raw);
     }
