@@ -29,14 +29,21 @@
     arc: ["arc"],
     reach: ["reach"],
     caveat: ["caveat"],
+    sensitivity: ["sensitivity"],
     score: ["score"],
     source: ["source link", "source"],
   };
 
   const URL_RE = /https?:\/\/[^\s)>\]]+/g;
   const ISO_DATE_RE = /\b\d{4}-\d{2}-\d{2}\b/;
-  const OVERALL_RE = /\b([0-5])\s*\/\s*5\b/;
+  const ISO_DATE_RE_G = /\b\d{4}-\d{2}-\d{2}\b/g;
+  // "4.5/5" must not read as an overall of 5, so refuse a preceding digit or dot.
+  const OVERALL_RE = /(?:^|[^\d.])([0-5])\s*\/\s*5\b/;
   const DIMS = ["p", "hook", "now", "voice", "arc", "reach"];
+
+  // How far past the ~7 day window a dated "why now" can sit before it stops
+  // being a reason to tell the story *this* week.
+  const STALE_DAYS = 14;
 
   const REFUSAL_SIGNALS = [
     "stopping rather than",
@@ -60,12 +67,76 @@
     ", inc.", " inc.", " gmbh",
   ];
 
+  // Acknowledging a cluster means naming it. Generic praise ("good spread across
+  // sources") is exactly the boilerplate the check exists to catch, so only words
+  // that admit clustering count, plus naming the clustered source itself.
   const DIVERSITY_ACK = [
-    "cluster", "all from", "same source", "monotone", "lean", "spread", "skew", "swap",
+    "cluster", "all from", "same source", "monotone", "skew", "swap", "over-index",
   ];
 
+  // A source URL's host tells you where the candidate was found. A repo host does
+  // not: almost every candidate links a repo, so counting raw domains would call
+  // any list "varied". These are folded into feeds, and repo hosts are generic.
+  const FEEDS = {
+    "news.ycombinator.com": "Hacker News",
+    "hn.algolia.com": "Hacker News",
+    "reddit.com": "Reddit",
+    "redd.it": "Reddit",
+    "producthunt.com": "Product Hunt",
+    "lobste.rs": "Lobsters",
+    "dev.to": "Dev.to",
+    "indiehackers.com": "Indie Hackers",
+    "hackaday.com": "Hackaday",
+    "hackaday.io": "Hackaday",
+    "itch.io": "itch.io",
+    "devpost.com": "Devpost",
+    "kickstarter.com": "Kickstarter",
+    "tindie.com": "Tindie",
+    "youtube.com": "YouTube",
+    "youtu.be": "YouTube",
+    "twitch.tv": "Twitch",
+    "bsky.app": "Bluesky",
+    "mastodon.social": "Mastodon",
+    "fosstodon.org": "Mastodon",
+    "x.com": "X",
+    "twitter.com": "X",
+    "github.com": "GitHub",
+    "gist.github.com": "GitHub",
+    "github.blog": "GitHub",
+    "gitlab.com": "GitLab",
+    "codeberg.org": "Codeberg",
+    "sourcehut.org": "sourcehut",
+  };
+  // Code hosts: where the work lives, not where you found the person.
+  const GENERIC_FEEDS = ["GitHub", "GitLab", "Codeberg", "sourcehut"];
+  // The rubric flags a cluster at three or more entries from one source.
+  const CLUSTER_MIN = 3;
+
+  // Surfacing a minor is a different decision from surfacing an adult, so it has
+  // to be named in the brief rather than discovered during outreach.
+  const MINOR_RE = new RegExp(
+    "\\b(?:1[0-7]\\s*[- ]?\\s*year[- ]?old|high[- ]school(?:er)?|teenager|teenage|" +
+    "under\\s*18|underage|schoolkid|middle[- ]school)\\b",
+    "i"
+  );
+  const MINOR_ACK = ["minor", "age", "guardian", "parent", "consent", "under 18", "school"];
+
+  // Contact paths must be public and non-invasive.
+  const INVASIVE_SIGNALS = [
+    "phone number", "home address", "personal phone", "cell number",
+    "mobile number", "employer email", "work email", "home email",
+    "family member", "school address",
+  ];
+  const PHONE_RE = /(?:^|[^\w])(?:\+\d{1,3}[\s.-]?)?(?:\(\d{2,4}\)\s*|\d{2,4}[\s.-])\d{2,4}[\s.-]?\d{2,4}(?!\w)/;
+
+  // Field bullets look like: - **Label:** value
   const FIELD_LINE_RE = /^\s*[-*]\s*\*\*([^*]+?):?\*\*\s*(.*)$/;
-  const SECTION_HEADER_RE = /^\s*#{1,6}\s/;
+  const HEADER_RE = /^\s*#{1,6}\s/;
+  const PARKING_HEADER_RE = /^\s*#{1,6}\s*parking\b/i;
+  // "Shortlist check" is a report section, not more candidates, so it must be
+  // tested before the plain "Shortlist" header.
+  const CHECK_HEADER_RE = /^\s*#{1,6}\s*(?:shortlist check|list check|notes|taste log|tuning)\b/i;
+  const SHORTLIST_HEADER_RE = /^\s*#{1,6}\s*shortlist\b/i;
 
   function violation(code, severity, message, entry) {
     return { code, severity, message, entry: entry || null };
@@ -81,14 +152,32 @@
     return null;
   }
 
-  function parseEntries(text) {
-    const lines = text.split(/\r?\n/);
+  /* Split a run into 'shortlist', 'parking' and 'other' line groups.
+   *
+   * Without this, a parking lot written with the same bold-label template parses
+   * as extra shortlist entries: false missing-field errors and a false size
+   * violation for names that were never shortlisted. */
+  function splitSections(text) {
+    const out = { shortlist: [], parking: [], other: [] };
+    let section = "shortlist";
+    for (const line of text.split(/\r?\n/)) {
+      if (HEADER_RE.test(line)) {
+        if (PARKING_HEADER_RE.test(line)) section = "parking";
+        else if (CHECK_HEADER_RE.test(line)) section = "other";
+        else if (SHORTLIST_HEADER_RE.test(line)) section = "shortlist";
+      }
+      out[section].push(line);
+    }
+    return out;
+  }
+
+  function _parseEntryLines(lines) {
     const entries = [];
     let current = null;
     for (const line of lines) {
       const m = FIELD_LINE_RE.exec(line);
       if (!m) {
-        if (current !== null && SECTION_HEADER_RE.test(line)) {
+        if (current !== null && HEADER_RE.test(line)) {
           entries.push(current);
           current = null;
         }
@@ -106,6 +195,18 @@
     }
     if (current !== null) entries.push(current);
     return entries;
+  }
+
+  function parseEntries(text) {
+    return _parseEntryLines(splitSections(text).shortlist);
+  }
+
+  /* The prose of a run, with candidate field bullets removed. Refusal detection
+   * reads this rather than the raw text: a brief for an offline-first project
+   * ("works without internet access") otherwise trips the refusal regex and
+   * voids the entire run. */
+  function narrativeText(text) {
+    return text.split(/\r?\n/).filter((line) => !FIELD_LINE_RE.test(line)).join("\n");
   }
 
   function entryGet(entry, key) {
@@ -132,15 +233,97 @@
     return names;
   }
 
+  /* Reduce a rolodex cell to a comparable token. '@octocat',
+   * 'https://github.com/octocat' and 'octocat' are the same person, and the
+   * table is hand-typed, so whitespace is collapsed too. */
+  function normalizeDnrName(name) {
+    let n = String(name || "").trim().toLowerCase();
+    n = n.replace(/^https?:\/\//, "");
+    n = n.replace(/^(?:www\.)?(?:github|gitlab|codeberg)\.com\//, "");
+    n = n.replace(/^@+/, "").trim().replace(/^\/+|\/+$/g, "");
+    return n.replace(/\s+/g, " ");
+  }
+
+  function _boundedIncludes(hay, needle) {
+    let idx = hay.indexOf(needle);
+    while (idx !== -1) {
+      const before = idx > 0 ? hay[idx - 1] : "";
+      const after = idx + needle.length < hay.length ? hay[idx + needle.length] : "";
+      if (!/[a-z0-9]/.test(before) && !/[a-z0-9]/.test(after)) return true;
+      idx = hay.indexOf(needle, idx + 1);
+    }
+    return false;
+  }
+
+  /* Which do-not-resurface entries genuinely appear in this text. Matching is
+   * bounded, not substring: a rolodex entry for 'ai' must not veto 'Aisha', and
+   * very short tokens are ignored because they cannot be identifying. */
+  function dnrMatches(haystack, dnrNames) {
+    const hay = String(haystack || "").toLowerCase().replace(/\s+/g, " ");
+    const hits = [];
+    for (const raw of dnrNames || []) {
+      const needle = normalizeDnrName(raw);
+      if (needle.length < 3) continue;
+      if (_boundedIncludes(hay, needle)) hits.push(raw);
+    }
+    return hits;
+  }
+
   function _domain(url) {
     const m = /^https?:\/\/([^/]+)\/?/.exec(url);
     return m ? m[1].toLowerCase().replace("www.", "") : url.toLowerCase();
   }
 
+  function _feed(url) {
+    const domain = _domain(url);
+    for (const host of Object.keys(FEEDS)) {
+      if (domain === host || domain.endsWith("." + host)) return FEEDS[host];
+    }
+    return domain;
+  }
+
+  /* The feed an entry was sourced from: the first non-repo host if there is one,
+   * since a repo link says where the code lives, not where you found them. */
+  function entryFeed(urls) {
+    const feeds = urls.map(_feed);
+    for (const f of feeds) {
+      if (GENERIC_FEEDS.indexOf(f) === -1) return f;
+    }
+    return feeds.length ? feeds[0] : null;
+  }
+
+  function isoDates(value) {
+    const out = [];
+    for (const raw of findAll(ISO_DATE_RE_G, String(value || ""))) {
+      const parts = raw.split("-").map((x) => parseInt(x, 10));
+      const d = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+      if (
+        d.getUTCFullYear() === parts[0] &&
+        d.getUTCMonth() === parts[1] - 1 &&
+        d.getUTCDate() === parts[2]
+      ) {
+        out.push(d);
+      }
+    }
+    return out;
+  }
+
+  function _coerceDate(value) {
+    if (value === null || value === undefined || value === "") return null;
+    if (value instanceof Date) return value;
+    const dates = isoDates(String(value));
+    return dates.length ? dates[0] : null;
+  }
+
+  function _isoString(d) {
+    return d.toISOString().slice(0, 10);
+  }
+
   function isRefusal(text) {
-    const low = text.toLowerCase();
+    const narrative = narrativeText(text);
+    const low = narrative.toLowerCase();
     if (REFUSAL_SIGNALS.some((sig) => low.includes(sig))) return true;
-    return REFUSAL_RE.test(text);
+    return REFUSAL_RE.test(narrative);
   }
 
   function parseScoreTuple(scoreText) {
@@ -172,10 +355,13 @@
     return out;
   }
 
-  function evaluate(text, dnrNames, live) {
+  /* Lint a run. Pass options.asOf (a YYYY-MM-DD string) to also check recency. */
+  function evaluate(text, dnrNames, live, options) {
     dnrNames = dnrNames || [];
+    const asOf = _coerceDate(options && options.asOf);
     const violations = [];
-    const entries = parseEntries(text);
+    const sections = splitSections(text);
+    const entries = _parseEntryLines(sections.shortlist);
 
     if (isRefusal(text)) {
       if (entries.length) {
@@ -199,7 +385,16 @@
       violations.push(violation("SHORTLIST_SIZE", WARN, `Shortlist has ${n} entries (<5) with no 'quiet week' justification.`));
     }
 
-    const domains = [];
+    const seenNames = new Set();
+    for (const e of entries) {
+      const key = e.name.trim().toLowerCase().replace(/\s+/g, " ");
+      if (key && seenNames.has(key)) {
+        violations.push(violation("DUPLICATE_ENTRY", ERROR, "This candidate appears more than once in the shortlist.", e.name));
+      }
+      seenNames.add(key);
+    }
+
+    const feeds = [];
     for (const e of entries) {
       const label = e.name || "(unnamed)";
       for (const fkey of REQUIRED_FIELDS) {
@@ -212,11 +407,28 @@
       if (!srcUrls.length) {
         violations.push(violation("NO_SOURCE_URL", ERROR, "No source URL. Every candidate needs a live link opened this run.", label));
       }
-      if (srcUrls.length) domains.push(_domain(srcUrls[0]));
+      const feed = entryFeed(srcUrls);
+      if (feed) feeds.push(feed);
 
       const why = entryGet(e, "why_now").toLowerCase();
       if (why && !(ISO_DATE_RE.test(entryGet(e, "why_now")) || why.includes("evergreen"))) {
         violations.push(violation("UNDATED_WHY_NOW", ERROR, "'Why now' has no date and is not labeled evergreen.", label));
+      }
+      if (asOf !== null) {
+        const dates = isoDates(entryGet(e, "why_now"));
+        if (dates.length) {
+          const newest = new Date(Math.max.apply(null, dates.map((d) => d.getTime())));
+          const cutoff = new Date(asOf.getTime() - STALE_DAYS * 86400000);
+          if (newest.getTime() > asOf.getTime()) {
+            violations.push(violation("FUTURE_WHY_NOW", WARN, `'Why now' is dated ${_isoString(newest)}, after the run date.`, label));
+          } else if (newest.getTime() < cutoff.getTime()) {
+            violations.push(violation(
+              "STALE_WHY_NOW", WARN,
+              `'Why now' is dated ${_isoString(newest)}, outside the ~7 day window. It is a reason, but not a reason this week.`,
+              label
+            ));
+          }
+        }
       }
 
       const scores = parseScoreTuple(entryGet(e, "score"));
@@ -235,31 +447,59 @@
         }
       }
 
-      const hay = `${entryGet(e, "name")} ${entryGet(e, "project")}`.toLowerCase();
-      for (const bad of dnrNames) {
-        if (bad && hay.includes(bad)) {
-          violations.push(violation("RESURFACED", ERROR, `Matches do-not-resurface entry '${bad}'.`, label));
-        }
+      const hay = `${entryGet(e, "name")} ${entryGet(e, "project")}`;
+      for (const bad of dnrMatches(hay, dnrNames)) {
+        violations.push(violation("RESURFACED", ERROR, `Matches do-not-resurface entry '${bad}'.`, label));
       }
 
       const blob = e.raw.toLowerCase();
-      const caveat = entryGet(e, "caveat").toLowerCase();
+      const caveat = `${entryGet(e, "caveat")} ${entryGet(e, "sensitivity")}`.toLowerCase();
       const hit = CORPORATE_SIGNALS.find((s) => blob.includes(s));
       if (hit && !caveat.includes(hit) && !caveat.includes("corporate") && !caveat.includes("vc") && !caveat.includes("funded")) {
         violations.push(violation("CORPORATE_FALSE_POSITIVE", WARN, `Looks funded/corporate ('${hit.trim()}') with no caveat.`, label));
       }
-    }
 
-    const nonEmpty = domains.filter((d) => d);
-    const uniq = new Set(nonEmpty);
-    if (nonEmpty.length >= 3 && uniq.size === 1) {
-      const checkText = _shortlistCheckText(text);
-      if (!DIVERSITY_ACK.some((w) => checkText.includes(w))) {
+      if (MINOR_RE.test(e.raw) && !MINOR_ACK.some((a) => caveat.includes(a))) {
         violations.push(violation(
-          "MONOTONE_SHORTLIST", WARN,
-          `All ${nonEmpty.length} entries share one source (${uniq.values().next().value}) and the shortlist check doesn't flag it.`
+          "MINOR_SUBJECT", WARN,
+          "Reads as a minor with no caveat. Filming a minor needs a guardian, so say so in the brief.",
+          label
         ));
       }
+      const reachProse = entryGet(e, "reach").replace(URL_RE, " ").replace(ISO_DATE_RE_G, " ");
+      const invasive = INVASIVE_SIGNALS.find((s) => reachProse.toLowerCase().includes(s));
+      if (invasive || PHONE_RE.test(reachProse)) {
+        violations.push(violation(
+          "INVASIVE_CONTACT", WARN,
+          `Contact path looks invasive (${invasive || "a phone number"}). Use public, non-invasive paths only.`,
+          label
+        ));
+      }
+    }
+
+    // Diversity: a clustered shortlist must be acknowledged in the check line.
+    if (feeds.length) {
+      const counts = {};
+      for (const f of feeds) counts[f] = (counts[f] || 0) + 1;
+      let top = null;
+      for (const k of Object.keys(counts)) {
+        if (top === null || counts[k] > counts[top] || (counts[k] === counts[top] && k > top)) top = k;
+      }
+      if (counts[top] >= CLUSTER_MIN) {
+        const check = _shortlistCheckText(text);
+        if (!(DIVERSITY_ACK.some((w) => check.includes(w)) || check.includes(top.toLowerCase()))) {
+          violations.push(violation(
+            "MONOTONE_SHORTLIST", WARN,
+            `${counts[top]} of ${entries.length} entries come from one source (${top}) and the shortlist check doesn't flag it.`
+          ));
+        }
+      }
+    }
+
+    // The do-not-resurface list is an exclusion, so parking someone still breaks it.
+    const parking = sections.parking.join("\n");
+    for (const bad of dnrMatches(parking, dnrNames)) {
+      violations.push(violation("RESURFACED_PARKING", WARN, `Parking lot names do-not-resurface entry '${bad}'.`));
     }
 
     // Live URL resolution (the Python --live path) is intentionally omitted in
@@ -286,7 +526,8 @@
 
   const api = {
     ERROR, WARN, REQUIRED_FIELDS,
-    parseEntries, parseDnrNames, parseScoreTuple, isRefusal,
+    parseEntries, splitSections, narrativeText, parseDnrNames, dnrMatches,
+    normalizeDnrName, parseScoreTuple, isRefusal, entryFeed,
     evaluate, hasErrors, formatReport,
   };
 

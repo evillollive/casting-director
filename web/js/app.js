@@ -43,6 +43,7 @@
     prep: $("#panel-prep"),
     eval: $("#panel-eval"),
     rolodex: $("#panel-rolodex"),
+    taste: $("#panel-taste"),
     reference: $("#panel-reference"),
   };
   function keyFromTab(tab) { return tab.id.replace("tab-", ""); }
@@ -55,6 +56,7 @@
     for (const [k, panel] of Object.entries(panels)) panel.hidden = k !== key;
     if (key === "prep") refreshPrompt();
     if (key === "rolodex") renderRolodex();
+    if (key === "taste") renderTasteLog();
     if (key === "reference") loadReference();
   }
   tabs.forEach((tab) => tab.addEventListener("click", () => showTab(keyFromTab(tab))));
@@ -66,6 +68,7 @@
   /* ---------- prep a run ---------- */
   const promptPreview = $("#prompt-preview");
   const dnrNote = $("#dnr-injected-note");
+  const dirtyNote = $("#prompt-dirty-note");
 
   function injectDnr(template, table) {
     // Replace the "<!-- paste here -->" marker inside the DO-NOT-RESURFACE block.
@@ -75,26 +78,76 @@
     return template;
   }
 
-  async function refreshPrompt() {
+  function buildPrompt(template) {
+    const entries = Rolodex.load();
+    let out = injectDnr(template, Rolodex.toTable(entries));
+    out = Tuning.inject(out, Tuning.load());
+    out = TasteLog.inject(out, TasteLog.load());
+    return out;
+  }
+
+  function injectedNote() {
+    const rolodexCount = Rolodex.load().filter((e) => e.name || e.project).length;
+    const tasteCount = TasteLog.load().filter((e) => e.note).length;
+    const parts = [];
+    parts.push(
+      rolodexCount
+        ? rolodexCount + " rolodex " + (rolodexCount === 1 ? "entry" : "entries") + " injected"
+        : "no rolodex entries yet"
+    );
+    if (tasteCount) parts.push(tasteCount + " taste-log " + (tasteCount === 1 ? "line" : "lines"));
+    return parts.join(", ") + ".";
+  }
+
+  async function refreshPrompt(force) {
     try {
       if (promptTemplate === null) promptTemplate = await fetchText("tier0-weekly-scan.md");
     } catch (err) {
       promptPreview.value = "Could not load the prompt. If you are running this locally, serve the folder over http (see the README): " + err.message;
       return;
     }
-    const entries = Rolodex.load();
-    const table = Rolodex.toTable(entries);
+    renderTuningInputs();
     // Only re-inject if the user hasn't hand-edited the preview since last build.
-    if (!promptPreview.dataset.dirty) {
-      promptPreview.value = injectDnr(promptTemplate, table);
+    if (force || !promptPreview.dataset.dirty) {
+      promptPreview.value = buildPrompt(promptTemplate);
+      delete promptPreview.dataset.dirty;
     }
-    const count = entries.filter((e) => e.name || e.project).length;
-    dnrNote.textContent = count
-      ? count + " rolodex " + (count === 1 ? "entry" : "entries") + " injected."
-      : "No rolodex entries yet; the DO-NOT-RESURFACE block is empty.";
+    dirtyNote.hidden = !promptPreview.dataset.dirty;
+    dnrNote.textContent = injectedNote();
   }
 
-  promptPreview.addEventListener("input", () => { promptPreview.dataset.dirty = "1"; });
+  promptPreview.addEventListener("input", () => {
+    promptPreview.dataset.dirty = "1";
+    dirtyNote.hidden = false;
+  });
+
+  $("#btn-rebuild-prompt").addEventListener("click", () => {
+    refreshPrompt(true);
+    status("Prompt rebuilt from your rolodex, TUNING, and taste log.", "ok");
+  });
+
+  /* ---------- tuning ---------- */
+  function tuningInput(key) { return document.getElementById("tuning-" + key); }
+
+  function renderTuningInputs() {
+    const values = Tuning.load();
+    for (const f of Tuning.FIELDS) {
+      const input = tuningInput(f.key);
+      if (input && input.value !== values[f.key]) input.value = values[f.key];
+    }
+  }
+
+  for (const f of Tuning.FIELDS) {
+    const input = tuningInput(f.key);
+    if (!input) continue;
+    input.addEventListener("change", () => {
+      const values = Tuning.load();
+      values[f.key] = input.value;
+      Tuning.save(values);
+      refreshPrompt();
+      status("TUNING saved.", "ok");
+    });
+  }
 
   $("#btn-copy-prompt").addEventListener("click", async () => {
     try {
@@ -114,21 +167,103 @@
   /* ---------- evaluate a run ---------- */
   const runInput = $("#run-input");
   const reportEl = $("#report");
+  const captureEl = $("#capture");
+
+  function todayISO() {
+    const d = new Date();
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  }
+
+  function stripBold(s) {
+    return String(s || "").replace(/\*\*/g, "").trim();
+  }
+
+  // Parking lot entries are deliberately not parsed as candidates by the
+  // evaluator, but they are still names worth remembering.
+  function parkingCandidates(text) {
+    const out = [];
+    let pending = null;
+    for (const line of CastingEval.splitSections(text).parking) {
+      const labelled = /^\s*[-*]\s*\*\*([^*]+?):?\*\*\s*(.*)$/.exec(line);
+      if (labelled) {
+        const label = labelled[1].trim().toLowerCase();
+        if (label.startsWith("name")) {
+          pending = { name: labelled[2].trim(), project: "" };
+          out.push(pending);
+        } else if (pending && label.startsWith("project")) {
+          pending.project = labelled[2].trim();
+        }
+        continue;
+      }
+      const plain = /^\s*[-*]\s+(.+)$/.exec(line);
+      if (!plain) continue;
+      const body = stripBold(plain[1]);
+      if (!body || /^(none|nothing)\b/i.test(body)) continue;
+      const split = body.split(/\s*[:,]\s*/);
+      out.push({ name: split[0].trim(), project: split.slice(1).join(": ").trim() });
+      pending = null;
+    }
+    return out.filter((e) => e.name);
+  }
+
+  function shortlistCandidates(text) {
+    return CastingEval.parseEntries(text).map((e) => ({
+      name: stripBold(e.fields.name || ""),
+      project: stripBold(e.fields.project || ""),
+    })).filter((e) => e.name);
+  }
+
+  function addToRolodex(candidates, statusLabel) {
+    const existing = Rolodex.load();
+    const seen = new Set(existing.map((x) => (x.name + "|" + x.project).toLowerCase()));
+    let added = 0;
+    for (const c of candidates) {
+      const key = (c.name + "|" + c.project).toLowerCase();
+      if (seen.has(key)) continue;
+      existing.push(Rolodex.normalize({
+        name: c.name,
+        project: c.project,
+        status: statusLabel,
+        date: todayISO(),
+        note: "captured from a run",
+      }));
+      seen.add(key);
+      added++;
+    }
+    Rolodex.save(existing);
+    return added;
+  }
 
   $("#btn-evaluate").addEventListener("click", () => {
     const text = runInput.value.trim();
     if (!text) { status("Paste a run output first.", "err"); return; }
     const dnrNames = CastingEval.parseDnrNames(Rolodex.toTable(Rolodex.load()));
-    const violations = CastingEval.evaluate(text, dnrNames, false);
+    const violations = CastingEval.evaluate(text, dnrNames, false, { asOf: todayISO() });
     renderReport(violations);
+    captureEl.hidden = !CastingEval.parseEntries(text).length;
     const errs = violations.filter((v) => v.severity === "error").length;
     status(errs ? errs + " error(s) found." : "Evaluation complete.", errs ? "err" : "ok");
+  });
+
+  $("#btn-capture-shortlist").addEventListener("click", () => {
+    const added = addToRolodex(shortlistCandidates(runInput.value), "surfaced");
+    renderRolodex();
+    status(added ? "Added " + added + " to the rolodex as surfaced." : "Everyone on this shortlist is already in the rolodex.", "ok");
+  });
+
+  $("#btn-capture-parking").addEventListener("click", () => {
+    const found = parkingCandidates(runInput.value);
+    if (!found.length) { status("No parking lot names found in this run.", "err"); return; }
+    const added = addToRolodex(found, "parked");
+    renderRolodex();
+    status(added ? "Added " + added + " to the rolodex as parked." : "Those parked names are already in the rolodex.", "ok");
   });
 
   $("#btn-load-sample").addEventListener("click", async () => {
     try {
       runInput.value = await fetchText("sample-run.md");
       reportEl.innerHTML = "";
+      captureEl.hidden = true;
       status("Loaded a clean sample run. Evaluate it to see a pass.", "ok");
     } catch (err) {
       status(err.message, "err");
@@ -138,6 +273,7 @@
   $("#btn-clear-run").addEventListener("click", () => {
     runInput.value = "";
     reportEl.innerHTML = "";
+    captureEl.hidden = true;
   });
 
   function renderReport(violations) {
@@ -274,6 +410,67 @@
       Rolodex.save([]);
       renderRolodex();
       status("Rolodex cleared.", "ok");
+    }
+  });
+
+  /* ---------- taste log ---------- */
+  const tasteList = $("#taste-list");
+  const tasteEmpty = $("#taste-empty");
+  const tasteWeek = $("#taste-week");
+  const tasteNote = $("#taste-note");
+
+  function renderTasteLog() {
+    const entries = TasteLog.load();
+    tasteList.innerHTML = "";
+    tasteEmpty.hidden = entries.length > 0;
+    if (!tasteWeek.value) tasteWeek.value = todayISO();
+    entries.forEach((entry, idx) => {
+      const li = document.createElement("li");
+      const week = document.createElement("span");
+      week.className = "taste-week";
+      week.textContent = "Week of " + (entry.week || "____");
+      const note = document.createElement("span");
+      note.className = "taste-note";
+      note.textContent = entry.note;
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "btn btn-ghost btn-sm";
+      remove.setAttribute("aria-label", "Remove entry");
+      remove.textContent = "\u2715";
+      remove.addEventListener("click", () => {
+        const all = TasteLog.load();
+        all.splice(idx, 1);
+        TasteLog.save(all);
+        renderTasteLog();
+      });
+      li.appendChild(week);
+      li.appendChild(note);
+      li.appendChild(remove);
+      tasteList.appendChild(li);
+    });
+  }
+
+  $("#btn-taste-add").addEventListener("click", () => {
+    const note = tasteNote.value.trim();
+    if (!note) { status("Write a line first.", "err"); return; }
+    TasteLog.add(tasteWeek.value || todayISO(), note);
+    tasteNote.value = "";
+    renderTasteLog();
+    refreshPrompt();
+    status("Taste log entry added. It will ride along in the next prompt.", "ok");
+  });
+
+  $("#btn-taste-export").addEventListener("click", () => {
+    downloadText("taste-log.md", TasteLog.toMarkdown(TasteLog.load()));
+    status("Exported taste-log.md", "ok");
+  });
+
+  $("#btn-taste-clear").addEventListener("click", () => {
+    if (!TasteLog.load().length) return;
+    if (confirm("Clear the whole taste log from this browser?")) {
+      TasteLog.save([]);
+      renderTasteLog();
+      status("Taste log cleared.", "ok");
     }
   });
 

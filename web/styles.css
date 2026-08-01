@@ -238,3 +238,48 @@ table.dnr td input { margin: 0; }
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
   overflow: hidden; clip: rect(0,0,0,0); border: 0;
 }
+
+/* ---- tuning form ---- */
+.tuning {
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  padding: 12px 14px 14px;
+  margin: 14px 0;
+}
+.tuning legend { color: var(--muted); font-size: 0.85rem; padding: 0 6px; }
+.tuning label {
+  display: block;
+  margin: 8px 0 3px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.tuning input[type="text"] {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+}
+
+/* ---- capture block ---- */
+.capture {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--rule);
+}
+.capture-title { font-size: 0.95rem; margin: 0 0 4px; }
+
+/* ---- taste log ---- */
+.taste-list { list-style: none; padding: 0; margin: 16px 0 0; }
+.taste-list li {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--rule);
+}
+.taste-week { color: var(--muted); font-size: 0.85rem; white-space: nowrap; }
+.taste-note { flex: 1; }

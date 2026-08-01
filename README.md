@@ -24,12 +24,14 @@ Think of it as a casting director's workflow, run as a pipeline.
 
 ## The four stages
 
-1. **Sourcing**: cast a wide net across many feeds (Hacker News, GitHub, Reddit, and more).
-2. **Screening**: score each candidate against a casting rubric you author. This is the product.
+1. **Sourcing**: cast a wide net across many feeds. Not just the obvious three (Hacker News, GitHub, Reddit) but the places that surface people the aggregators structurally miss: makers and hardware, game jams, video and streams, the fediverse, non-English communities, and science, civic, and accessibility work. See [`sources.md`](sources.md).
+2. **Screening**: score each candidate against a casting rubric you author, then cut hard. This is the product.
 3. **The shortlist**: a ranked report where every entry is a short casting brief, not a link dump.
 4. **The rolodex**: persistent memory, so nobody gets re-surfaced and "great but not now" people get parked for later.
 
-The wide net is the easy part. What this skill is really for is **taste and judgment**: turning a feed of launches into a handful of castable human stories.
+The wide net is the easy part. What this skill is really for is **taste and judgment**: turning a feed of launches into a handful of castable human stories. Cast wide, then cut: a wider net only helps if the screen gets stricter at the same time.
+
+Because these are real people and not repos, the rubric carries a **consent and care** section: what counts as public information, when to hold a name back, and the [`Sensitivity`](rubric.md) line a brief should carry when a story involves a minor, a person at risk, or anything a subject would be alarmed to see written down.
 
 ## What's in here
 
@@ -43,7 +45,7 @@ There's one executable artifact and a few reference files. The prompt is what yo
 | [`sources.md`](sources.md) | The source list with its 2026 access realities (what's free, what's blocked, what costs money). |
 | [`rolodex/`](rolodex/) | Persistent memory: the do-not-resurface list and the taste log that teach the tool your eye over time. |
 | [`roadmap.md`](roadmap.md) | The three-tier build path, so the prompt can grow into a scheduled pipeline later. |
-| [`tools/casting_eval.py`](tools/casting_eval.py) | A linter for an actual run's output: catches hallucinated candidates, missing sources, undated "why now", gate violations, and resurfaced names. |
+| [`tools/casting_eval.py`](tools/casting_eval.py) | A linter for an actual run's output: catches hallucinated candidates, missing sources, undated or stale "why now", gate violations, duplicates, a shortlist clustered on one feed, resurfaced names (including in the parking lot), and briefs that touch a minor or paste private contact details. |
 | [`web/`](web/) | A static browser app: prep this week's prompt with your rolodex baked in, then lint a run's shortlist with an in-browser port of the evaluator. No account, no API key, nothing uploaded. Deployed to GitHub Pages. |
 | [`tests/`](tests/) | The test suite: spec-conformance checks plus adversarial output fixtures. See [`tests/README.md`](tests/README.md). |
 
@@ -63,9 +65,11 @@ Those edits are the real work. They calibrate the tool's taste. **Don't write a 
 
 There's a static browser front end for the Tier 0 loop in [`web/`](web/). It doesn't run the scan (that's still an AI job that needs live web search and judgment); it removes the copy-paste bookkeeping around it and runs entirely on your device, with no account and no API key:
 
-- **Prep a run** builds this week's prompt with your do-not-resurface list injected, ready to copy into an AI assistant with web search on.
-- **Evaluate a run** lints the shortlist that assistant returns. It's a faithful in-browser port of `tools/casting_eval.py`, so the gates, required fields, dated "why now", resurfaced-name, and monotone-source checks all run offline.
+- **Prep a run** builds this week's prompt with three things injected: your do-not-resurface list, this week's TUNING, and your recent taste-log lines. All three are remembered between weeks, so a fresh chat starts with the eye your previous runs taught it.
+- **Evaluate a run** lints the shortlist that assistant returns. It's a faithful in-browser port of `tools/casting_eval.py` (a test asserts the two agree violation-for-violation on every fixture), so gates, required fields, dated and recent "why now", duplicates, feed clustering, resurfaced names, and the sensitivity checks all run offline. Today's date is passed in, so staleness is judged against the week you're actually in.
+- **Close the loop** with one click after an evaluation: add the shortlisted names to the rolodex as `surfaced` and the parking-lot names as `parked`, so next week's prompt excludes them automatically.
 - **Rolodex** manages your do-not-resurface list in the browser's local storage and exports markdown that's drop-in compatible with [`rolodex/do-not-resurface.md`](rolodex/do-not-resurface.md).
+- **Taste log** keeps one line per run about what you loved and what you cut, exports markdown for [`rolodex/taste-log.md`](rolodex/taste-log.md), and feeds those lines back into every prompt you prep.
 
 Open the hosted app:
 
@@ -93,7 +97,7 @@ Do them in order. The rolodex is the part that compounds.
 
 ## Testing
 
-Even though the skill is a spec plus a prompt, it's tested. Run `pip install -r requirements-dev.txt` then `pytest tests/ -q`. The suite has three layers: spec-conformance checks (the prompt stays self-contained and in sync with `rubric.md`, no em dashes or vendor names, links resolve), an output evaluator (`tools/casting_eval.py`) that lints a real run's output against the hard rules, and parity checks that the browser app's `web/content/` mirror is in sync and its JavaScript evaluator agrees with the Python one on every fixture (the parity test is skipped if Node isn't installed). You can run the evaluator on any output by hand: `python tools/casting_eval.py run.md --dnr rolodex/do-not-resurface.md`. See [`tests/README.md`](tests/README.md).
+Even though the skill is a spec plus a prompt, it's tested. Run `pip install -r requirements-dev.txt` then `pytest tests/ -q`. The suite has three layers: spec-conformance checks (the prompt stays self-contained and in sync with `rubric.md`, no em dashes or vendor names, links resolve), an output evaluator (`tools/casting_eval.py`) that lints a real run's output against the hard rules, and parity checks that the browser app's `web/content/` mirror is in sync and its JavaScript evaluator agrees with the Python one on every fixture (the parity test is skipped if Node isn't installed). You can run the evaluator on any output by hand: `python tools/casting_eval.py run.md --dnr rolodex/do-not-resurface.md`. It checks "why now" against today by default; pass `--asof 2026-06-08` to lint an older run against the week it was made for, or `--no-recency` to skip the window entirely. See [`tests/README.md`](tests/README.md).
 
 ## Deploy
 

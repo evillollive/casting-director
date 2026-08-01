@@ -29,9 +29,10 @@ This skill is a single executable artifact plus two reference files. Don't re-de
 ## Non-negotiables
 
 - **Browse, don't guess.** The skill is useless without live sources. If you can't reach the web, stop and say so rather than inventing candidates.
-- **Verify before you write.** Every candidate needs a live source URL you opened this run, and a dated "why now" (or an explicit "evergreen" label). Never invent links, contacts, quotes, or milestones.
-- **Real people, public info.** This profiles real humans. Use only public information, suggest only non-invasive contact paths, and remember that surfacing someone is a pitch lead, not their consent to be filmed.
-- **Gates hold.** A candidate only makes the shortlist with Protagonist >= 3 and Visible hook >= 3. Respect every exclusion and the do-not-resurface list.
+- **Verify before you write.** Every candidate needs a live source URL you opened this run, and a dated "why now" (or an explicit "evergreen" label). Never invent links, contacts, quotes, or milestones, and never list the same person twice.
+- **Real people, public info.** This profiles real humans. Use only public information, suggest only non-invasive contact paths, and remember that surfacing someone is a pitch lead, not their consent to be filmed. Name it in the brief's Sensitivity line when a candidate is a minor or otherwise needs care, and don't surface anyone the exposure could put at risk. The full rule is the "Consent and care" section of [`rubric.md`](rubric.md).
+- **Cast wide, then cut.** The core three feeds only find launches. Rotate through the wider net in [`sources.md`](sources.md) so the shortlist doesn't become one scene talking to itself.
+- **Gates hold.** A candidate only makes the shortlist with Protagonist >= 3 and Visible hook >= 3. Respect every exclusion and the do-not-resurface list, in the parking lot as well as the shortlist.
 - **Facts over adjectives.** Keep briefs plain. The facts should carry the pitch.
 
 ## After a run

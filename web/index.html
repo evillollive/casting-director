@@ -27,6 +27,7 @@
       <button class="tab" role="tab" id="tab-prep" aria-controls="panel-prep" aria-selected="true">1. Prep a run</button>
       <button class="tab" role="tab" id="tab-eval" aria-controls="panel-eval" aria-selected="false">2. Evaluate a run</button>
       <button class="tab" role="tab" id="tab-rolodex" aria-controls="panel-rolodex" aria-selected="false">Rolodex</button>
+      <button class="tab" role="tab" id="tab-taste" aria-controls="panel-taste" aria-selected="false">Taste log</button>
       <button class="tab" role="tab" id="tab-reference" aria-controls="panel-reference" aria-selected="false">Reference</button>
       <p id="status" class="tab-status" role="status" aria-live="polite"></p>
     </div>
@@ -38,18 +39,29 @@
     <section class="panel" id="panel-prep" role="tabpanel" aria-labelledby="tab-prep">
       <div class="card">
         <h2 class="section-title"><span class="step-num">1</span>Prep this week's prompt</h2>
-        <p class="help">The scan itself is an AI job: it needs live web search and judgment, so it runs in your AI assistant, not here. This tab builds the exact prompt to paste in, with your <strong>do-not-resurface</strong> list from the <a href="#" data-goto="rolodex">Rolodex</a> tab injected automatically.</p>
+        <p class="help">The scan itself is an AI job: it needs live web search and judgment, so it runs in your AI assistant, not here. This tab builds the exact prompt to paste in, with your <strong>do-not-resurface</strong> list from the <a href="#" data-goto="rolodex">Rolodex</a> tab, this week's <strong>TUNING</strong>, and your recent <a href="#" data-goto="taste">taste log</a> injected automatically.</p>
         <ol class="help">
-          <li>Update the <strong>TUNING</strong> block in the preview for this week's focus.</li>
+          <li>Fill in <strong>TUNING</strong> below for this week's focus. It is remembered between runs.</li>
           <li>Click <strong>Copy prompt</strong>.</li>
           <li>Paste it into an AI assistant with <strong>web search ON</strong> (or a browsing agent) and run it.</li>
           <li>Bring the shortlist it returns back to the <a href="#" data-goto="eval">Evaluate a run</a> tab.</li>
         </ol>
+        <fieldset class="tuning">
+          <legend>TUNING (remembered between runs)</legend>
+          <label for="tuning-beat">Beat / theme focus right now</label>
+          <input type="text" id="tuning-beat" placeholder="e.g. hardware and physical builds" />
+          <label for="tuning-hardNos">Hard nos</label>
+          <input type="text" id="tuning-hardNos" placeholder="what you keep rejecting" />
+          <label for="tuning-moreOf">More of</label>
+          <input type="text" id="tuning-moreOf" placeholder="what you want more of" />
+        </fieldset>
         <div class="row">
           <button type="button" id="btn-copy-prompt" class="btn btn-primary">Copy prompt</button>
           <button type="button" id="btn-download-prompt" class="btn">Download .md</button>
+          <button type="button" id="btn-rebuild-prompt" class="btn btn-ghost">Rebuild from saved state</button>
           <span class="muted" id="dnr-injected-note"></span>
         </div>
+        <p id="prompt-dirty-note" class="empty-note" hidden>You have edited this prompt by hand, so it no longer updates when your rolodex, TUNING, or taste log change. Rebuild to pick them up again.</p>
         <label for="prompt-preview" class="sr-only">Prompt preview</label>
         <textarea id="prompt-preview" class="prompt-box" spellcheck="false" aria-label="Prompt preview"></textarea>
       </div>
@@ -68,6 +80,36 @@
         <label for="run-input" class="sr-only">Run output to evaluate</label>
         <textarea id="run-input" rows="16" spellcheck="false" placeholder="Paste the assistant's shortlist output here…" aria-label="Run output to evaluate"></textarea>
         <div id="report" class="report" aria-live="polite"></div>
+        <div id="capture" class="capture" hidden>
+          <h3 class="capture-title">Close the loop</h3>
+          <p class="help">Everyone you surface should stop resurfacing. Add this run's names to the rolodex so next week's prompt excludes them.</p>
+          <div class="row">
+            <button type="button" id="btn-capture-shortlist" class="btn">Add shortlist as surfaced</button>
+            <button type="button" id="btn-capture-parking" class="btn btn-ghost">Add parking lot as parked</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ TASTE LOG ============ -->
+    <section class="panel" id="panel-taste" role="tabpanel" aria-labelledby="tab-taste" hidden>
+      <div class="card">
+        <h2 class="section-title">Taste log</h2>
+        <p class="help">One line per run: what you loved, what you cut, and why. This is the part that teaches the tool your eye, so your recent lines are injected into every prompt you prep. Stored only in this browser's <code>localStorage</code>.</p>
+        <div class="row">
+          <label class="inline-label">Week of
+            <input type="date" id="taste-week" class="ref-select" />
+          </label>
+        </div>
+        <label for="taste-note" class="sr-only">This run's note</label>
+        <textarea id="taste-note" rows="3" placeholder="Loved the kiln controller: real stakes, real pictures. Cut two wrapper projects with no person behind them."></textarea>
+        <div class="row">
+          <button type="button" id="btn-taste-add" class="btn btn-primary">Add entry</button>
+          <button type="button" id="btn-taste-export" class="btn btn-ghost">Export markdown</button>
+          <button type="button" id="btn-taste-clear" class="btn btn-ghost">Clear all</button>
+        </div>
+        <ul id="taste-list" class="taste-list"></ul>
+        <p id="taste-empty" class="empty-note" hidden>No entries yet. After a run, write the one line you would tell a colleague about what worked.</p>
       </div>
     </section>
 
@@ -134,6 +176,7 @@
   <script src="js/casting-eval.js"></script>
   <script src="js/markdown.js"></script>
   <script src="js/rolodex.js"></script>
+  <script src="js/memory.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
