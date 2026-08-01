@@ -1,8 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 64" role="img" aria-label="casting-director">
-  <g fill="none">
-    <rect x="4" y="18" width="34" height="24" rx="3" fill="#111111"/>
-    <circle cx="21" cy="30" r="6" fill="#ffd400"/>
-    <rect x="16" y="11" width="10" height="6" rx="2" fill="#111111"/>
+  <defs>
+    <mask id="cdc"><circle cx="18" cy="18" r="11.5" fill="#fff"/><path d="M17 18 L31 10 L31 26 Z" fill="#000"/></mask>
+    <mask id="cdd"><rect x="25" y="5" width="26" height="26" fill="#fff"/></mask>
+  </defs>
+  <g transform="translate(26 19) scale(0.82) translate(-26 -18)">
+    <circle cx="18" cy="18" r="11.5" fill="#111111" mask="url(#cdc)"/>
+    <circle cx="34" cy="18" r="11.5" fill="#111111" mask="url(#cdd)"/>
+    <polygon points="26,25.5 17,30 35,30" fill="#111111"/>
   </g>
-  <text x="48" y="39" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="700" fill="#111111">casting-director</text>
+  <rect x="9" y="28" width="38" height="20" rx="4" fill="#111111"/>
+  <polygon points="47,32 60,28 60,46 47,42" fill="#111111"/>
+  <text x="72" y="41" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="700" fill="#111111">casting-director</text>
 </svg>

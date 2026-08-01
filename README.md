@@ -1,14 +1,23 @@
-# casting-director
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="web/assets/logo-dark.svg">
+    <img src="web/assets/logo.svg" alt="casting-director" width="380">
+  </picture>
+</p>
 
-[![tests](https://github.com/evillollive/casting-director/actions/workflows/tests.yml/badge.svg)](https://github.com/evillollive/casting-director/actions/workflows/tests.yml)
-[![Release and deploy](https://github.com/evillollive/casting-director/actions/workflows/deploy.yml/badge.svg)](https://github.com/evillollive/casting-director/actions/workflows/deploy.yml)
-[![License: AGPL v3](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
-[![No build step](https://img.shields.io/badge/build-none-lightgrey)](#use-it-in-your-browser)
+<p align="center">
+  <a href="https://github.com/evillollive/casting-director/actions/workflows/tests.yml"><img src="https://github.com/evillollive/casting-director/actions/workflows/tests.yml/badge.svg" alt="tests"></a>
+  <a href="https://github.com/evillollive/casting-director/actions/workflows/deploy.yml"><img src="https://github.com/evillollive/casting-director/actions/workflows/deploy.yml/badge.svg" alt="Release and deploy"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/evillollive/casting-director" alt="License: AGPL v3"></a>
+  <a href="#use-it-in-your-browser"><img src="https://img.shields.io/badge/build-none-lightgrey" alt="No build step"></a>
+</p>
+
+# casting-director
 
 **Cast stories, not link dumps.** An agentic AI skill that hands you a short ranked list of **people worth a conversation**: the hook for each, why they'd be good on camera, and how to reach them. It doesn't hand you "40 trending repos."
 
 <p align="center">
-  <img src="web/assets/logo.svg" alt="casting-director" width="440">
+  <img src="docs/assets/demo-preview.svg" alt="A wide net of developer feeds screened into a short ranked shortlist" width="900">
 </p>
 
 Think of it as a casting director's workflow, run as a pipeline.
