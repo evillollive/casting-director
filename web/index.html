@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; base-uri 'self'; form-action 'self'; object-src 'none'" />
+  <meta name="referrer" content="no-referrer" />
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
+  <title>casting-director: prep and check a weekly casting scan in your browser</title>
+  <meta name="description" content="Prepare the casting-director weekly-scan prompt and lint a run's shortlist against the skill's hard rules, entirely in your browser. No account, no API key, no data leaves your device." />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="wrap">
+      <h1 class="site-logo">
+        <img src="assets/logo-dark.svg" alt="casting-director" width="320" height="60" />
+      </h1>
+      <p class="tagline">Prep the weekly casting-scan prompt with your rolodex baked in, then lint the AI's shortlist against the skill's hard rules. Runs entirely in your browser: no account, no API key, nothing uploaded.</p>
+    </div>
+  </header>
+
+  <nav class="tabs" aria-label="Sections">
+    <div class="wrap tabs-inner" role="tablist">
+      <button class="tab" role="tab" id="tab-prep" aria-controls="panel-prep" aria-selected="true">1. Prep a run</button>
+      <button class="tab" role="tab" id="tab-eval" aria-controls="panel-eval" aria-selected="false">2. Evaluate a run</button>
+      <button class="tab" role="tab" id="tab-rolodex" aria-controls="panel-rolodex" aria-selected="false">Rolodex</button>
+      <button class="tab" role="tab" id="tab-reference" aria-controls="panel-reference" aria-selected="false">Reference</button>
+      <p id="status" class="tab-status" role="status" aria-live="polite"></p>
+    </div>
+  </nav>
+
+  <main id="main" class="wrap">
+
+    <!-- ============ PREP A RUN ============ -->
+    <section class="panel" id="panel-prep" role="tabpanel" aria-labelledby="tab-prep">
+      <div class="card">
+        <h2 class="section-title"><span class="step-num">1</span>Prep this week's prompt</h2>
+        <p class="help">The scan itself is an AI job: it needs live web search and judgment, so it runs in your AI assistant, not here. This tab builds the exact prompt to paste in, with your <strong>do-not-resurface</strong> list from the <a href="#" data-goto="rolodex">Rolodex</a> tab injected automatically.</p>
+        <ol class="help">
+          <li>Update the <strong>TUNING</strong> block in the preview for this week's focus.</li>
+          <li>Click <strong>Copy prompt</strong>.</li>
+          <li>Paste it into an AI assistant with <strong>web search ON</strong> (or a browsing agent) and run it.</li>
+          <li>Bring the shortlist it returns back to the <a href="#" data-goto="eval">Evaluate a run</a> tab.</li>
+        </ol>
+        <div class="row">
+          <button type="button" id="btn-copy-prompt" class="btn btn-primary">Copy prompt</button>
+          <button type="button" id="btn-download-prompt" class="btn">Download .md</button>
+          <span class="muted" id="dnr-injected-note"></span>
+        </div>
+        <label for="prompt-preview" class="sr-only">Prompt preview</label>
+        <textarea id="prompt-preview" class="prompt-box" spellcheck="false" aria-label="Prompt preview"></textarea>
+      </div>
+    </section>
+
+    <!-- ============ EVALUATE A RUN ============ -->
+    <section class="panel" id="panel-eval" role="tabpanel" aria-labelledby="tab-eval" hidden>
+      <div class="card">
+        <h2 class="section-title"><span class="step-num">2</span>Lint a run's output</h2>
+        <p class="help">Paste the shortlist your assistant produced. This runs the same checks as <code>tools/casting_eval.py</code> — gates, required fields, dated "why now", resurfaced names, monotone sources, and refusal integrity — fully offline. Your <a href="#" data-goto="rolodex">rolodex</a> is used for do-not-resurface matching.</p>
+        <div class="row">
+          <button type="button" id="btn-evaluate" class="btn btn-primary">Evaluate</button>
+          <button type="button" id="btn-load-sample" class="btn">Load sample run</button>
+          <button type="button" id="btn-clear-run" class="btn btn-ghost">Clear</button>
+        </div>
+        <label for="run-input" class="sr-only">Run output to evaluate</label>
+        <textarea id="run-input" rows="16" spellcheck="false" placeholder="Paste the assistant's shortlist output here…" aria-label="Run output to evaluate"></textarea>
+        <div id="report" class="report" aria-live="polite"></div>
+      </div>
+    </section>
+
+    <!-- ============ ROLODEX ============ -->
+    <section class="panel" id="panel-rolodex" role="tabpanel" aria-labelledby="tab-rolodex" hidden>
+      <div class="card">
+        <h2 class="section-title">Do-not-resurface rolodex</h2>
+        <p class="help">People already surfaced, contacted, cast, or passed on. They are excluded from the prompt and flagged if they reappear in a run. Stored only in this browser's <code>localStorage</code> — nothing leaves your device.</p>
+        <div class="table-scroll">
+          <table class="dnr">
+            <thead>
+              <tr>
+                <th scope="col">Name / handle</th>
+                <th scope="col">Project</th>
+                <th scope="col">Status</th>
+                <th scope="col">Date</th>
+                <th scope="col">Note</th>
+                <th scope="col"><span class="sr-only">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody id="dnr-body"></tbody>
+          </table>
+        </div>
+        <p id="dnr-empty" class="empty-note" hidden>No entries yet. Add the people you have already covered so they stop resurfacing.</p>
+        <div class="row">
+          <button type="button" id="btn-dnr-add" class="btn">+ Add entry</button>
+          <button type="button" id="btn-dnr-export" class="btn btn-ghost">Export markdown</button>
+          <label class="btn btn-ghost dnr-import-label">Import markdown
+            <input type="file" id="dnr-import-file" accept=".md,.markdown,.txt" hidden />
+          </label>
+          <button type="button" id="btn-dnr-clear" class="btn btn-ghost">Clear all</button>
+        </div>
+        <p class="help">Tip: the exported markdown is drop-in compatible with <code>rolodex/do-not-resurface.md</code> in the repo, so Tier 0 and this app share one format.</p>
+      </div>
+    </section>
+
+    <!-- ============ REFERENCE ============ -->
+    <section class="panel" id="panel-reference" role="tabpanel" aria-labelledby="tab-reference" hidden>
+      <div class="card">
+        <div class="row">
+          <label class="inline-label">Show
+            <select id="ref-select" class="ref-select">
+              <option value="tier0-weekly-scan.md">The prompt (tier-0 weekly scan)</option>
+              <option value="rubric.md">The rubric</option>
+              <option value="sources.md">The sources</option>
+            </select>
+          </label>
+        </div>
+        <div id="ref-doc" class="doc"></div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <p>Runs entirely in your browser. No account, no backend, no API key, no analytics. The weekly scan runs in your own AI assistant; this app only preps the prompt and lints the result.</p>
+      <p><a href="https://github.com/evillollive/casting-director">Source on GitHub</a> &middot; the same rules live in <code>prompts/tier0-weekly-scan.md</code>, <code>rubric.md</code>, and <code>tools/casting_eval.py</code>.</p>
+      <p class="version-line">Version <span id="app-version">dev</span></p>
+    </div>
+  </footer>
+
+  <script src="version.js"></script>
+  <script src="js/casting-eval.js"></script>
+  <script src="js/markdown.js"></script>
+  <script src="js/rolodex.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

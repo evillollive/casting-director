@@ -42,7 +42,11 @@ REQUIRED_FILES = [
 
 
 def all_markdown():
-    return [p for p in ROOT.rglob("*.md") if ".git" not in p.parts]
+    return [
+        p
+        for p in ROOT.rglob("*.md")
+        if ".git" not in p.parts and "content" not in p.relative_to(ROOT).parts[:2]
+    ]
 
 
 # --- Repo integrity ---
