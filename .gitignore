@@ -4,9 +4,10 @@
 .idea/
 .vscode/
 
-# Secrets and local env (for when Tier 1 lands)
+# Secrets and local env
 .env
 .env.*
+!.env.example
 *.local
 
 # Python (Tier 1)
@@ -15,8 +16,15 @@ __pycache__/
 .venv/
 venv/
 
-# Node (Tier 1)
+# Node / Next.js (Tier 2)
 node_modules/
+.next/
+coverage/
+*.tsbuildinfo
+
+# Prisma
+prisma/*.db
+prisma/*.db-journal
 
 # pytest
 .pytest_cache/

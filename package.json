@@ -1,0 +1,46 @@
+{
+  "name": "casting-director",
+  "version": "0.1.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "engines": {
+    "node": ">=20.9"
+  },
+  "scripts": {
+    "postinstall": "prisma generate",
+    "dev": "next dev",
+    "start": "next start",
+    "build": "next build",
+    "lint": "eslint . --max-warnings=0",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "test:python": "pytest tests/ -q",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate deploy",
+    "db:import-memory": "tsx scripts/import-memory.ts",
+    "auth:bootstrap": "tsx scripts/bootstrap-auth.ts",
+    "worker": "tsx src/worker/cli.ts",
+    "backup:postgres": "bash scripts/backup-postgres.sh",
+    "restore:postgres": "bash scripts/restore-postgres.sh"
+  },
+  "dependencies": {
+    "@casting/python-bridge": "file:runtime/python-bridge",
+    "@prisma/client": "6.19.1",
+    "next": "16.2.1",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.4",
+    "@types/node": "24.10.1",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "eslint": "9.39.4",
+    "eslint-config-next": "16.2.1",
+    "prisma": "6.19.1",
+    "tsx": "4.21.0",
+    "typescript": "5.9.3",
+    "vitest": "4.1.0"
+  }
+}

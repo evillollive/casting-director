@@ -17,7 +17,16 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: "20"
+          cache: npm
       - name: Install dev dependencies
         run: pip install -r requirements-dev.txt
-      - name: Run the test suite
+      - name: Install application dependencies
+        run: npm ci
+      - name: Run the Python test suite
         run: pytest tests/ -q
+      - name: Run the TypeScript test suite
+        run: npm test
+      - name: Lint the Tier 2 application
+        run: npm run lint
+      - name: Build the Tier 2 application
+        run: npm run build

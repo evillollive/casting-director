@@ -172,13 +172,19 @@ def utc_datetime(value: str | int | float | None) -> datetime | None:
     return parsed.replace(tzinfo=parsed.tzinfo or timezone.utc).astimezone(timezone.utc)
 
 
-def collect_sources(sources: Iterable[Source | SourceRegistration], since: datetime) -> SourceFetch:
+def collect_sources(
+    sources: Iterable[Source | SourceRegistration],
+    since: datetime,
+    on_progress=None,
+) -> SourceFetch:
     """Collect every source without letting one failed feed end the run."""
     combined = SourceFetch()
     for item in sources:
         registration = item if isinstance(item, SourceRegistration) else SourceRegistration(item)
         source = registration.connector
         expected = registration.expected_failure
+        if on_progress:
+            on_progress(source.name, "running", None)
         try:
             result = source.fetch(since)
         except Exception as exc:  # Network and schema failures are isolated by feed.
@@ -188,6 +194,8 @@ def collect_sources(sources: Iterable[Source | SourceRegistration], since: datet
                 )
             else:
                 combined.errors.append(f"{source.name}: {exc}")
+            if on_progress:
+                on_progress(source.name, "failed", str(exc))
             continue
         combined.candidates.extend(result.candidates)
         combined.expected_failures.extend(result.expected_failures)
@@ -209,4 +217,8 @@ def collect_sources(sources: Iterable[Source | SourceRegistration], since: datet
                 f"{source.name}: UNEXPECTED SUCCESS for a source marked expected-to-fail "
                 f"({expected.reason}); clear the registry flag if access is reliable."
             )
+        if on_progress:
+            source_error = "; ".join(result.errors + result.expected_failures) or None
+            status = "failed" if result.errors and not result.candidates else "completed"
+            on_progress(source.name, status, source_error, len(result.candidates))
     return combined

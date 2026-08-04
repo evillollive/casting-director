@@ -6,6 +6,7 @@ as the expanded-but-synced reference, SKILL.md kept thin, the diversity bug
 staying fixed, and the user's hard rules (no em dashes, no vendor names).
 """
 import re
+import os
 from pathlib import Path
 
 import pytest
@@ -44,11 +45,18 @@ REQUIRED_FILES = [
 
 
 def all_markdown():
-    return [
-        p
-        for p in ROOT.rglob("*.md")
-        if ".git" not in p.parts and "content" not in p.relative_to(ROOT).parts[:2]
-    ]
+    markdown = []
+    for directory, child_directories, files in os.walk(ROOT):
+        child_directories[:] = [
+            name
+            for name in child_directories
+            if name not in {".git", ".next", "node_modules"}
+        ]
+        parent = Path(directory)
+        if "content" in parent.relative_to(ROOT).parts[:2]:
+            continue
+        markdown.extend(parent / name for name in files if name.endswith(".md"))
+    return markdown
 
 
 # --- Repo integrity ---

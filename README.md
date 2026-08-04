@@ -9,7 +9,7 @@
   <a href="https://github.com/evillollive/casting-director/actions/workflows/tests.yml"><img src="https://github.com/evillollive/casting-director/actions/workflows/tests.yml/badge.svg" alt="tests"></a>
   <a href="https://github.com/evillollive/casting-director/actions/workflows/deploy.yml"><img src="https://github.com/evillollive/casting-director/actions/workflows/deploy.yml/badge.svg" alt="Release and deploy"></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/evillollive/casting-director" alt="License: AGPL v3"></a>
-  <a href="#use-it-in-your-browser"><img src="https://img.shields.io/badge/build-none-lightgrey" alt="No build step"></a>
+  <a href="#use-it-in-your-browser"><img src="https://img.shields.io/badge/Tier%200-no%20build-lightgrey" alt="Tier 0 has no build step"></a>
 </p>
 
 # casting-director
@@ -35,7 +35,8 @@ Because these are real people and not repos, the rubric carries a **consent and 
 
 ## What's in here
 
-There's one executable artifact and a few reference files. The prompt is what you actually run; everything else exists to support and evolve it.
+The prompt remains the canonical editorial runtime artifact. The supporting
+implementations automate that contract without replacing it.
 
 | Path | What it is |
 |------|------------|
@@ -50,6 +51,9 @@ There's one executable artifact and a few reference files. The prompt is what yo
 | [`tools/prompt_builder.py`](tools/prompt_builder.py) | Builds the screening prompt from the canonical Tier 0 markdown, current rolodex, TUNING, and recent taste-log lines. |
 | [`tools/sources/`](tools/sources/) | Public HTTP connectors for Hacker News, GitHub, Reddit, Hackaday, and itch.io, all returning one shared candidate shape. |
 | [`web/`](web/) | A static browser app: prep this week's prompt with your rolodex baked in, then lint a run's shortlist with an in-browser port of the evaluator. No account, no API key, nothing uploaded. Deployed to GitHub Pages. |
+| [`src/app/`](src/app/) | The authenticated Tier 2 Next.js product: shortlist, live scans, rolodex, tuning, taste history, and immutable scan history. It remains separate from the static Pages app. |
+| [`prisma/`](prisma/) | The Tier 2 Postgres schema and migration, including relational rolodex history, scan audit data, immutable tuning and taste revisions, and database quality gates. |
+| [`src/domain/`](src/domain/) | Provider-neutral typed API and lifecycle contracts. The canonical rubric and evaluator are not duplicated here. |
 | [`tests/`](tests/) | The test suite: spec-conformance checks plus adversarial output fixtures. See [`tests/README.md`](tests/README.md). |
 
 ## How to use it this week
@@ -118,6 +122,92 @@ python3 -m http.server 8000
 
 The app fetches the real prompt, rubric, and sources from `web/content/`, which is a byte-for-byte mirror of the canonical files. Regenerate it with `python tools/sync_web_content.py` after editing any of them; a test fails if the copies drift.
 
+## Run Tier 2
+
+Tier 2 layers 1 through 4 add a server-rendered Next.js application,
+authenticated product APIs, Postgres persistence, and a separately run durable
+worker, conflict-aware repository interoperability, operational recovery, and
+vendor-neutral runtime packaging while keeping `web/` and the Python engine
+authoritative. The worker and tuning preview call the canonical Python sourcing,
+prompt, screening, rendering, evaluator, and identity normalization modules;
+they do not duplicate the rubric in TypeScript.
+
+Requirements are Node.js 20.9 or newer and PostgreSQL. Configure the variables
+in [`.env.example`](.env.example), then run:
+
+```bash
+npm ci
+npm run db:migrate
+npm run auth:bootstrap -- --email you@example.com --name "Your name"
+npm run dev
+# in a second process
+npm run worker
+```
+
+The bootstrap command explicitly creates the first workspace membership and a
+random, expiring session token. Enter that token at `/sign-in`; the browser
+stores it only in an HTTP-only, same-site cookie. Production never assumes a
+development identity or permits unauthenticated product writes. Add later team
+members by rerunning the command with their email and name. The first member is
+an administrator and subsequent members are regular members.
+
+The health endpoint at `/api/health` reports database readiness, fresh workers,
+queued jobs, and expired leases without returning secret values. Run
+`npm run worker -- --healthcheck` for worker readiness or
+`npm run worker -- --once` to process at most one job. The application is
+deployment provider neutral: use any Node.js runtime and PostgreSQL service
+that preserve durable jobs and backups. See
+[`docs/tier2-scan-engine.md`](docs/tier2-scan-engine.md) and
+[`docs/tier2-operations.md`](docs/tier2-operations.md).
+
+Authenticated pages are available at `/` (Shortlist), `/scans/live`,
+`/scans`, `/rolodex`, `/tuning`, and `/taste-log`. The product APIs cover
+candidate filters and cursor pagination, optimistic candidate edits and bulk
+actions, immutable tuning revisions, revisioned taste observations, and durable
+scan polling/history. Failed scan output is exposed only as diagnostic output,
+never as a shippable shortlist.
+
+Prisma models durable users and workspace membership, authentication identities
+and sessions, candidate identity and merge provenance, normalized tags,
+append-only notes, candidate status history, scans and per-source progress,
+historical screening snapshots, evaluator violations, tuning revisions, taste
+log revisions, and markdown sync state. The migration enforces one active scan
+per workspace and rejects a completed scan unless evaluation passed with no
+ERROR violations.
+
+Preview the existing markdown memory without a database write:
+
+```bash
+npm run db:import-memory
+```
+
+After migrations and initial team-user provisioning, import it with:
+
+```bash
+npm run db:import-memory -- --write --actor editor@example.com
+```
+
+The actor is required when taste-log rows exist so authorship is preserved.
+This command is the bootstrap path only. Ongoing changes use authenticated
+`POST /api/rolodex/sync`, signed webhook/scheduled ingestion, durable export
+jobs, `GET /api/rolodex/sync` operational status, and explicit conflict
+resolution on `/rolodex`. A markdown DNR deletion never clears Postgres
+automatically.
+
+Build the provider-neutral production image and inspect the example topology:
+
+```bash
+docker build -t casting-director:local .
+docker compose -f docker-compose.production.yml config
+```
+
+Backup and restore default to preview/inspection and require deliberate flags
+for writes. Full environment, migration, health, recovery, local/git, and
+GitHub REST integration contracts are in
+[`docs/tier2-operations.md`](docs/tier2-operations.md). Interface adaptation
+provenance is recorded in
+[`docs/tier2-provenance.md`](docs/tier2-provenance.md).
+
 ## The build path, in one breath
 
 - **Tier 0**: one rich prompt, run manually each week, to calibrate taste. It stays available as the no-infrastructure path.
@@ -128,7 +218,18 @@ Do them in order. The rolodex is the part that compounds.
 
 ## Testing
 
-Even though the skill is a spec plus a prompt, it's tested. Run `pip install -r requirements-dev.txt` then `pytest tests/ -q`. The suite has three layers: spec-conformance checks (the prompt stays self-contained and in sync with `rubric.md`, no em dashes or vendor names, links resolve), an output evaluator (`tools/casting_eval.py`) that lints a real run's output against the hard rules, and parity checks that the browser app's `web/content/` mirror is in sync and its JavaScript evaluator agrees with the Python one on every fixture (the parity test is skipped if Node isn't installed). You can run the evaluator on any output by hand: `python tools/casting_eval.py run.md --dnr rolodex/do-not-resurface.md`. It checks "why now" against today by default; pass `--asof 2026-06-08` to lint an older run against the week it was made for, or `--no-recency` to skip the window entirely. See [`tests/README.md`](tests/README.md).
+Run the canonical Python suite with `pip install -r requirements-dev.txt` then
+`pytest tests/ -q`. It covers spec conformance, the output evaluator, source
+connectors, the Tier 1 pipeline, and parity with the static browser evaluator.
+
+For Tier 2, run `npm ci`, `npm test`, `npm run typecheck`, `npm run lint`, and
+`npm run build`. The
+TypeScript suite covers configuration errors, API optimistic concurrency,
+markdown parsing and reconciliation, sync conflict safety, webhook verification,
+shortlist gate semantics, scan completion rules, and database invariants. Run
+`pytest tests/ -q` for Python, backup/restore, and packaging checks. You can
+still run the evaluator directly with
+`python tools/casting_eval.py run.md --dnr rolodex/do-not-resurface.md`.
 
 ## Deploy
 

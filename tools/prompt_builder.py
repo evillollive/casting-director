@@ -30,8 +30,7 @@ def dnr_table(markdown: str) -> str:
         cells = [cell.strip() for cell in row.strip("|").split("|")]
         if len(cells) < 2:
             continue
-        joined = " ".join(cells[:2]).lower()
-        if "example" in joined:
+        if all(cell.lower().startswith("_example:") for cell in cells[:2]):
             continue
         kept.append(row)
     return "\n".join(kept)
@@ -40,11 +39,18 @@ def dnr_table(markdown: str) -> str:
 def inject_tuning(template: str, values: dict | None) -> str:
     out = template
     for key, label in TUNING_FIELDS.items():
-        value = str((values or {}).get(key) or "").strip()
+        value = " ".join(str((values or {}).get(key) or "").split())
         if not value:
             continue
         pattern = rf"^- \*\*{re.escape(label)}:\*\*.*$"
-        out = re.sub(pattern, f"- **{label}:** {value}", out, count=1, flags=re.MULTILINE)
+        replacement = f"- **{label}:** {value}"
+        out = re.sub(
+            pattern,
+            lambda _match, text=replacement: text,
+            out,
+            count=1,
+            flags=re.MULTILINE,
+        )
     return out
 
 
@@ -61,7 +67,14 @@ def inject_taste_log(template: str, taste_markdown: str) -> str:
     lines = recent_taste_lines(taste_markdown)
     if not lines:
         return template
-    return re.sub(r"^- _Week of ____:_$", "\n".join(lines), template, count=1, flags=re.MULTILINE)
+    replacement = "\n".join(lines)
+    return re.sub(
+        r"^- _Week of ____:_$",
+        lambda _match: replacement,
+        template,
+        count=1,
+        flags=re.MULTILINE,
+    )
 
 
 def build_prompt(
@@ -72,10 +85,61 @@ def build_prompt(
     tuning: dict | None = None,
 ) -> str:
     template = prompt_path.read_text(encoding="utf-8")
-    table = dnr_table(dnr_path.read_text(encoding="utf-8"))
+    return build_prompt_from_text(
+        template=template,
+        dnr_markdown=dnr_path.read_text(encoding="utf-8"),
+        taste_markdown=taste_path.read_text(encoding="utf-8"),
+        tuning=tuning,
+    )
+
+
+def build_prompt_from_text(
+    *,
+    template: str,
+    dnr_markdown: str,
+    taste_markdown: str,
+    tuning: dict | None = None,
+) -> str:
+    """Build the canonical prompt from immutable database-backed snapshots."""
+    table = dnr_table(dnr_markdown)
     out = template.replace("<!-- paste here -->", table, 1)
     out = inject_tuning(out, tuning)
-    return inject_taste_log(out, taste_path.read_text(encoding="utf-8"))
+    return inject_taste_log(out, taste_markdown)
+
+
+def build_prompt_from_snapshots(
+    *,
+    template: str,
+    do_not_resurface: list[dict],
+    taste_log: list[dict],
+    tuning: dict | None = None,
+) -> str:
+    """Build from the same database snapshot shapes stored on Tier 2 scans."""
+    dnr_lines = ["| Name / handle | Project |", "|---|---|"]
+    for row in do_not_resurface:
+        name = str(row.get("name") or "").replace("|", "\\|")
+        handle = str(row.get("handle") or "").replace("|", "\\|")
+        project = str(row.get("project") or "").replace("|", "\\|")
+        if name:
+            dnr_lines.append(f"| {name} | {project} |")
+        if handle and handle.lower().lstrip("@") != name.lower().lstrip("@"):
+            dnr_lines.append(f"| {handle} | {project} |")
+    taste_markdown = "\n".join(
+        f"- _Week of {row['weekOf']}:_ {' '.join(str(row['note']).split())}"
+        for row in reversed(taste_log)
+    )
+    tuning_snapshot = tuning or {}
+    normalized_tuning = {
+        "beat": tuning_snapshot.get("beat", ""),
+        "hardNos": "; ".join(tuning_snapshot.get("hardNos") or []),
+        "moreOf": "; ".join(tuning_snapshot.get("moreOf") or []),
+    }
+    return build_prompt_from_text(
+        template=template,
+        dnr_markdown="\n".join(dnr_lines) + "\n",
+        taste_markdown=taste_markdown,
+        tuning=normalized_tuning,
+    )
 
 
 def tuning_from_environment() -> dict:

@@ -29,6 +29,17 @@ def default_sources(client: HttpClient | None = None):
     ]
 
 
+def sources_by_key(client: HttpClient | None = None):
+    """Return the stable database/API key for every canonical connector."""
+    connectors = default_sources(client)
+    return dict(
+        zip(
+            ("hacker-news", "github", "reddit", "hackaday", "itch.io"),
+            connectors,
+        )
+    )
+
+
 __all__ = [
     "GitHubSource",
     "HackadaySource",
@@ -43,4 +54,5 @@ __all__ = [
     "SourceRegistration",
     "collect_sources",
     "default_sources",
+    "sources_by_key",
 ]
