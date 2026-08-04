@@ -50,7 +50,37 @@ class CastingBrief:
         return self.protagonist >= 3 and self.visible_hook >= 3
 
 
-REQUIRED_TEXT = ["name", "project", "hook", "why_now", "voice", "arc", "reach", "rationale"]
+REQUIRED_KEYS = [
+    "name",
+    "handle",
+    "project",
+    "hook",
+    "why_now",
+    "voice",
+    "arc",
+    "reach",
+    "caveat",
+    "sensitivity",
+    "rationale",
+    "is_evergreen",
+    "category",
+    "region",
+    "not_for_surfacing",
+    "parked_reason",
+]
+REQUIRED_TEXT = [
+    "name",
+    "project",
+    "hook",
+    "why_now",
+    "voice",
+    "arc",
+    "reach",
+    "caveat",
+    "rationale",
+    "category",
+    "region",
+]
 SCORE_FIELDS = [
     "overall",
     "protagonist",
@@ -63,36 +93,44 @@ SCORE_FIELDS = [
 
 
 def brief_from_mapping(candidate: RawCandidate, value: dict) -> CastingBrief:
+    missing_keys = [key for key in REQUIRED_KEYS + SCORE_FIELDS if key not in value]
+    if missing_keys:
+        raise ScreenResponseError(f"screening response missing keys: {', '.join(missing_keys)}")
     missing = [key for key in REQUIRED_TEXT if not str(value.get(key) or "").strip()]
     if missing:
         raise ScreenResponseError(f"screening response missing fields: {', '.join(missing)}")
     scores = {}
     for key in SCORE_FIELDS:
         try:
+            if isinstance(value[key], bool):
+                raise ValueError
             score = int(value[key])
         except (KeyError, TypeError, ValueError) as exc:
             raise ScreenResponseError(f"screening response has no valid {key} score") from exc
         if score < 1 or score > 5:
             raise ScreenResponseError(f"screening response {key} score must be 1 through 5")
         scores[key] = score
+    for key in ("is_evergreen", "not_for_surfacing"):
+        if not isinstance(value[key], bool):
+            raise ScreenResponseError(f"screening response {key} must be a boolean")
     return CastingBrief(
         candidate=candidate,
         name=str(value["name"]).strip(),
-        handle=str(value.get("handle") or candidate.handle).strip(),
+        handle=str(value["handle"] or candidate.handle).strip(),
         project=str(value["project"]).strip(),
         hook=str(value["hook"]).strip(),
         why_now=str(value["why_now"]).strip(),
         voice=str(value["voice"]).strip(),
         arc=str(value["arc"]).strip(),
         reach=str(value["reach"]).strip(),
-        caveat=str(value.get("caveat") or "none").strip(),
-        sensitivity=str(value.get("sensitivity") or "").strip(),
+        caveat=str(value["caveat"]).strip(),
+        sensitivity=str(value["sensitivity"]).strip(),
         rationale=str(value["rationale"]).strip(),
-        is_evergreen=bool(value.get("is_evergreen")),
-        category=str(value.get("category") or "uncategorized").strip(),
-        region=str(value.get("region") or "unknown").strip(),
-        not_for_surfacing=bool(value.get("not_for_surfacing")),
-        parked_reason=str(value.get("parked_reason") or "").strip(),
+        is_evergreen=value["is_evergreen"],
+        category=str(value["category"]).strip(),
+        region=str(value["region"]).strip(),
+        not_for_surfacing=value["not_for_surfacing"],
+        parked_reason=str(value["parked_reason"]).strip(),
         **scores,
     )
 

@@ -7,7 +7,7 @@ from pathlib import Path
 import casting_eval as ce
 from dedupe import SeenStore, dedupe_candidates
 from render_report import render_report, select_shortlist
-from screen import CastingBrief, ScreenConfigurationError, brief_from_mapping
+from screen import CastingBrief, ScreenConfigurationError, ScreenResponseError, brief_from_mapping
 from sources import RawCandidate
 
 
@@ -139,6 +139,25 @@ def test_missing_api_key_fails_cleanly():
         assert "CASTING_LLM_API_KEY" in str(exc)
     else:
         raise AssertionError("missing key should fail")
+
+
+def test_structured_brief_requires_sensitivity_and_real_booleans():
+    missing_sensitivity = mapping(1)
+    del missing_sensitivity["sensitivity"]
+    try:
+        brief_from_mapping(raw(1), missing_sensitivity)
+    except ScreenResponseError as exc:
+        assert "sensitivity" in str(exc)
+    else:
+        raise AssertionError("sensitivity must be present even when empty")
+
+    string_boolean = mapping(1, is_evergreen="false")
+    try:
+        brief_from_mapping(raw(1), string_boolean)
+    except ScreenResponseError as exc:
+        assert "is_evergreen must be a boolean" in str(exc)
+    else:
+        raise AssertionError("string booleans must not be accepted")
 
 
 def test_rendered_report_passes_casting_eval_end_to_end():
