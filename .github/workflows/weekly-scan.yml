@@ -1,9 +1,18 @@
 name: Weekly casting scan
 
 on:
-  schedule:
-    - cron: "17 15 * * 1"
+  # Disabled because Stage 2 live screening has never run; prompt assembly and
+  # brief quality are verified only by stubs. Re-enable these two lines after
+  # one reviewed manual dry run produces casting briefs rather than link slop.
+  # schedule:
+  #   - cron: "17 15 * * 1"
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Build and evaluate the report without publishing or advancing memory
+        required: true
+        type: boolean
+        default: true
 
 permissions:
   contents: write
@@ -56,13 +65,23 @@ jobs:
             --dnr rolodex/do-not-resurface.md \
             --asof "${{ steps.run.outputs.date }}"
 
+      - name: Upload dry-run report
+        if: ${{ inputs.dry_run == true }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: casting-report-${{ steps.run.outputs.date }}
+          path: weekly-report.md
+          if-no-files-found: error
+
       - name: Open report issue
+        if: ${{ inputs.dry_run == false }}
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_DATE: ${{ steps.run.outputs.date }}
         run: gh issue create --title "Weekly casting scan - ${RUN_DATE}" --body-file weekly-report.md
 
       - name: Persist seen state
+        if: ${{ inputs.dry_run == false }}
         env:
           RUN_DATE: ${{ steps.run.outputs.date }}
         run: |

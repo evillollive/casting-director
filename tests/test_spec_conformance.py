@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parent.parent
 PROMPT = (ROOT / "prompts/tier0-weekly-scan.md").read_text(encoding="utf-8")
 RUBRIC = (ROOT / "rubric.md").read_text(encoding="utf-8")
 SKILL = (ROOT / "SKILL.md").read_text(encoding="utf-8")
+WEEKLY_WORKFLOW = (ROOT / ".github/workflows/weekly-scan.yml").read_text(encoding="utf-8")
 
 RUBRIC_DIMS = ["Protagonist", "Visible hook", "Why now", "Voice", "Arc", "Reach"]
 OUTPUT_FIELDS = [
@@ -174,3 +175,33 @@ def test_skill_has_consent_guardrail():
     low = SKILL.lower()
     assert "public info" in low
     assert "consent" in low
+
+
+def test_weekly_schedule_stays_disabled_until_live_screening_is_reviewed():
+    assert "# schedule:" in WEEKLY_WORKFLOW
+    assert '#   - cron: "17 15 * * 1"' in WEEKLY_WORKFLOW
+    assert "\n  schedule:\n" not in WEEKLY_WORKFLOW
+    assert "live screening" in WEEKLY_WORKFLOW.lower()
+
+
+def test_manual_dispatch_defaults_to_artifact_only_dry_run():
+    dry_run = WEEKLY_WORKFLOW.split("dry_run:", 1)[1].split("jobs:", 1)[0]
+    assert "type: boolean" in dry_run
+    assert "default: true" in dry_run
+    assert "actions/upload-artifact@v4" in WEEKLY_WORKFLOW
+    sourcing = _workflow_step("Run scheduled scan")
+    evaluator = _workflow_step("Enforce report gate")
+    artifact = _workflow_step("Upload dry-run report")
+    issue = _workflow_step("Open report issue")
+    persistence = _workflow_step("Persist seen state")
+    assert "\n        if:" not in sourcing
+    assert "\n        if:" not in evaluator
+    assert "if: ${{ inputs.dry_run == true }}" in artifact
+    assert "if: ${{ inputs.dry_run == false }}" in issue
+    assert "if: ${{ inputs.dry_run == false }}" in persistence
+
+
+def _workflow_step(name: str) -> str:
+    marker = f"      - name: {name}\n"
+    assert marker in WEEKLY_WORKFLOW
+    return WEEKLY_WORKFLOW.split(marker, 1)[1].split("\n      - name:", 1)[0]

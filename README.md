@@ -88,7 +88,9 @@ Reddit uses the official public per-subreddit Atom feeds and adapts to their str
 
 The durable seen list lives at [`rolodex/seen.json`](rolodex/seen.json) and is committed after each successful scheduled run, so resets are visible in git history. Shortlisted and hard-excluded candidates stay there permanently. Parking-lot candidates receive an eight-week cooldown and can return when their timing changes. The rollout imports the old Actions-cached `.casting/seen.json` once when available. If a non-empty run starts from an empty seen store, the report carries a loud warning for human review.
 
-[`.github/workflows/weekly-scan.yml`](.github/workflows/weekly-scan.yml) runs every Monday and can also be dispatched by hand. Configure `CASTING_LLM_API_KEY` as an Actions secret, plus `CASTING_LLM_API_URL` and `CASTING_LLM_MODEL` as repository variables. It opens a GitHub Issue only after a second, explicit evaluator pass succeeds, then commits the updated seen state to `main`. If delivery fails, memory is not advanced, so a transient Issue failure cannot silently discard the shortlist.
+[`.github/workflows/weekly-scan.yml`](.github/workflows/weekly-scan.yml) can be dispatched by hand and includes a disabled Monday schedule. Configure `CASTING_LLM_API_KEY` as an Actions secret, plus `CASTING_LLM_API_URL` and `CASTING_LLM_MODEL` as repository variables. A publishing run opens a GitHub Issue only after a second, explicit evaluator pass succeeds, then commits the updated seen state to `main`. If delivery fails, memory is not advanced, so a transient Issue failure cannot silently discard the shortlist.
+
+The pipeline is complete and tested, but its cron is intentionally disabled until live screening is proven. Manual dispatch defaults to `dry_run: true`: it runs sourcing, screening, rendering, and `casting_eval.py`, then uploads the report as an artifact without opening an Issue or advancing seen memory. Re-enable the commented schedule only after one reviewed dry run passes the evaluator and reads like casting briefs rather than link slop.
 
 ## Use it in your browser
 

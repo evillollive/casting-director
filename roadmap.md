@@ -20,7 +20,9 @@ Once the rubric is stable, codify it. The repository now includes this GitHub-na
 - It dedupes against [`rolodex/do-not-resurface.md`](rolodex/do-not-resurface.md) and the git-tracked [`rolodex/seen.json`](rolodex/seen.json), then assembles the run prompt from the canonical markdown, current TUNING, and recent taste-log lines. Final cuts remain permanent, while parking-lot candidates can return after an eight-week cooldown.
 - It sends survivors to a configurable model endpoint for structured briefs and applies Protagonist >= 3 and Visible hook >= 3 as the only mechanical shortlist gates.
 - It renders the exact Tier 0 report format and gates the report through [`tools/casting_eval.py`](tools/casting_eval.py).
-- [`.github/workflows/weekly-scan.yml`](.github/workflows/weekly-scan.yml) runs on a cron or manual dispatch, commits successful seen-state changes to `main`, and opens a GitHub Issue only after the evaluator exits successfully.
+- [`.github/workflows/weekly-scan.yml`](.github/workflows/weekly-scan.yml) supports manual dispatch and contains a disabled cron. Publishing runs commit successful seen-state changes to `main` and open a GitHub Issue only after the evaluator exits successfully.
+
+The implementation is complete and tested, but the cron is intentionally disabled until the first live screening output is reviewed. Manual dispatch defaults to `dry_run: true`, which uploads the evaluated report without publishing an Issue or advancing memory. The gate to enabling the schedule is one reviewed dry run that passes `casting_eval.py` and reads like casting briefs rather than link slop.
 
 ## Tier 2: small app with a real rolodex
 
