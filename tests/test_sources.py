@@ -5,14 +5,18 @@ from datetime import datetime, timezone
 import pytest
 
 from sources import (
+    ExpectedFailure,
     GitHubSource,
     HackadaySource,
     HackerNewsSource,
     HttpClient,
     ItchSource,
+    RawCandidate,
     RedditSource,
     SourceFetch,
+    SourceRegistration,
     collect_sources,
+    default_sources,
 )
 from sources.feed import parse_rss
 from sources.itch import itch_creator_from_link
@@ -279,3 +283,112 @@ def test_collector_tolerates_a_failed_source():
 
     result = collect_sources([Broken(), Working()], SINCE)
     assert result.errors == ["broken: offline", "working: partial warning"]
+
+
+def test_expected_failure_is_reported_separately_and_does_not_abort():
+    class Blocked:
+        name = "Reddit"
+
+        def fetch(self, since):
+            return SourceFetch(
+                errors=["Reddit r/test: HTTP Error 403: Blocked"]
+            )
+
+    class Working:
+        name = "working"
+
+        def fetch(self, since):
+            return SourceFetch(
+                candidates=[
+                    RawCandidate(
+                        name="Builder",
+                        handle="builder",
+                        project="Project",
+                        project_url="https://example.test/project",
+                        source="working",
+                        source_family="working",
+                        source_url="https://example.test/source",
+                        fingerprint="working:1",
+                        context="context",
+                    )
+                ]
+            )
+
+    result = collect_sources(
+        [
+            SourceRegistration(
+                Blocked(),
+                ExpectedFailure("blocked without OAuth", (401, 403)),
+            ),
+            Working(),
+        ],
+        SINCE,
+    )
+
+    assert len(result.candidates) == 1
+    assert result.errors == []
+    assert result.notices == []
+    assert len(result.expected_failures) == 1
+    assert "expected failure (blocked without OAuth)" in result.expected_failures[0]
+
+
+def test_expected_to_fail_source_surfaces_unexpected_success():
+    class Available:
+        name = "Reddit"
+
+        def fetch(self, since):
+            return SourceFetch(successful_requests=1)
+
+    result = collect_sources(
+        [
+            SourceRegistration(
+                Available(),
+                ExpectedFailure("blocked without OAuth", (401, 403)),
+            )
+        ],
+        SINCE,
+    )
+
+    assert result.expected_failures == []
+    assert result.errors == []
+    assert len(result.notices) == 1
+    assert "UNEXPECTED SUCCESS" in result.notices[0]
+    assert result.messages()[0].startswith("NOTICE:")
+
+
+def test_expected_to_fail_source_keeps_off_pattern_failure_real():
+    class Broken:
+        name = "Reddit"
+
+        def fetch(self, since):
+            return SourceFetch(
+                errors=["Reddit r/test: HTTP Error 500: Server Error"]
+            )
+
+    result = collect_sources(
+        [
+            SourceRegistration(
+                Broken(),
+                ExpectedFailure("blocked without OAuth", (401, 403)),
+            )
+        ],
+        SINCE,
+    )
+
+    assert result.expected_failures == []
+    assert result.notices == []
+    assert len(result.errors) == 1
+    assert "HTTP Error 500" in result.errors[0]
+    assert result.messages()[0].startswith("ERROR:")
+
+
+def test_default_registry_marks_reddit_expected_to_fail_only_for_auth_statuses():
+    reddit = next(
+        item
+        for item in default_sources(StubHttp())
+        if isinstance(item, SourceRegistration)
+        and isinstance(item.connector, RedditSource)
+    )
+
+    assert reddit.expected_failure.reason == "anonymous JSON is blocked without OAuth"
+    assert reddit.expected_failure.status_codes == (401, 403)

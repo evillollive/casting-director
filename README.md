@@ -84,6 +84,8 @@ python tools/weekly_scan.py \
   --run-date "$(date -u +%Y-%m-%d)"
 ```
 
+Reddit is currently registered as expected-to-fail only for anonymous HTTP 401/403 responses. A future OAuth implementation should read `REDDIT_CLIENT_ID` and `REDDIT_CLIENT_SECRET` from secrets plus a descriptive `REDDIT_USER_AGENT` setting. Once those credentials are wired into the connector and verified, remove the `ExpectedFailure` wrapper around `RedditSource` in [`tools/sources/__init__.py`](tools/sources/__init__.py). That flag removal is the only registry change needed to treat Reddit failures normally.
+
 The durable seen list lives at [`rolodex/seen.json`](rolodex/seen.json) and is committed after each successful scheduled run, so resets are visible in git history. Shortlisted and hard-excluded candidates stay there permanently. Parking-lot candidates receive an eight-week cooldown and can return when their timing changes. The rollout imports the old Actions-cached `.casting/seen.json` once when available. If a non-empty run starts from an empty seen store, the report carries a loud warning for human review.
 
 [`.github/workflows/weekly-scan.yml`](.github/workflows/weekly-scan.yml) runs every Monday and can also be dispatched by hand. Configure `CASTING_LLM_API_KEY` as an Actions secret, plus `CASTING_LLM_API_URL` and `CASTING_LLM_MODEL` as repository variables. It opens a GitHub Issue only after a second, explicit evaluator pass succeeds, then commits the updated seen state to `main`. If delivery fails, memory is not advanced, so a transient Issue failure cannot silently discard the shortlist.

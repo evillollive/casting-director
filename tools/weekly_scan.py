@@ -111,7 +111,9 @@ def run_pipeline(
     if not survivors:
         # Empty reports cannot pass casting_eval's NO_ENTRIES guard, and treating
         # collection or memory loss as a quiet week would create a false success.
-        raise PipelineError("no unseen candidates survived source collection and dedupe")
+        statuses = " ".join(fetched.messages())
+        detail = f" Source status: {statuses}" if statuses else ""
+        raise PipelineError(f"no unseen candidates survived source collection and dedupe.{detail}")
 
     prompt = build_prompt(tuning=tuning or {})
     client = llm_client or LlmClient.from_environment()
@@ -138,7 +140,7 @@ def run_pipeline(
 
     remember_screening_results(store, briefs, run_date)
     store.save()
-    return report, fetched.errors
+    return report, fetched.messages()
 
 
 def main() -> int:
@@ -155,7 +157,7 @@ def main() -> int:
     if args.tuning:
         tuning.update(json.loads(args.tuning.read_text(encoding="utf-8")))
     try:
-        _, errors = run_pipeline(
+        _, source_messages = run_pipeline(
             run_date=args.run_date,
             seen_path=args.seen,
             output_path=args.output,
@@ -166,8 +168,8 @@ def main() -> int:
     except (PipelineError, ScreenConfigurationError, OSError, ValueError) as exc:
         print(f"weekly scan failed: {exc}", file=sys.stderr)
         return 1
-    for error in errors:
-        print(f"source warning: {error}", file=sys.stderr)
+    for message in source_messages:
+        print(f"source status: {message}", file=sys.stderr)
     print(f"Wrote evaluated report to {args.output}")
     return 0
 

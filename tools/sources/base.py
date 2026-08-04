@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import time
 import urllib.parse
 import urllib.error
@@ -31,12 +32,41 @@ class RawCandidate:
 class SourceFetch:
     candidates: list[RawCandidate] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+    expected_failures: list[str] = field(default_factory=list)
+    notices: list[str] = field(default_factory=list)
+    successful_requests: int = 0
+
+    def messages(self) -> list[str]:
+        return (
+            [f"EXPECTED FAILURE: {message}" for message in self.expected_failures]
+            + [f"NOTICE: {message}" for message in self.notices]
+            + [f"ERROR: {message}" for message in self.errors]
+        )
 
 
 class Source(Protocol):
     name: str
 
     def fetch(self, since: datetime) -> SourceFetch: ...
+
+
+@dataclass(frozen=True)
+class ExpectedFailure:
+    reason: str
+    status_codes: tuple[int, ...]
+
+    def matches(self, error) -> bool:
+        code = getattr(error, "code", None)
+        if code is None:
+            match = re.search(r"\bHTTP Error (\d{3})\b", str(error))
+            code = int(match.group(1)) if match else None
+        return code in self.status_codes
+
+
+@dataclass(frozen=True)
+class SourceRegistration:
+    connector: Source
+    expected_failure: ExpectedFailure | None = None
 
 
 class HttpClient:
@@ -110,15 +140,41 @@ def utc_datetime(value: str | int | float | None) -> datetime | None:
     return parsed.replace(tzinfo=parsed.tzinfo or timezone.utc).astimezone(timezone.utc)
 
 
-def collect_sources(sources: Iterable[Source], since: datetime) -> SourceFetch:
+def collect_sources(sources: Iterable[Source | SourceRegistration], since: datetime) -> SourceFetch:
     """Collect every source without letting one failed feed end the run."""
     combined = SourceFetch()
-    for source in sources:
+    for item in sources:
+        registration = item if isinstance(item, SourceRegistration) else SourceRegistration(item)
+        source = registration.connector
+        expected = registration.expected_failure
         try:
             result = source.fetch(since)
         except Exception as exc:  # Network and schema failures are isolated by feed.
-            combined.errors.append(f"{source.name}: {exc}")
+            if expected and expected.matches(exc):
+                combined.expected_failures.append(
+                    f"{source.name}: expected failure ({expected.reason}): {exc}"
+                )
+            else:
+                combined.errors.append(f"{source.name}: {exc}")
             continue
         combined.candidates.extend(result.candidates)
-        combined.errors.extend(result.errors)
+        combined.expected_failures.extend(result.expected_failures)
+        combined.notices.extend(result.notices)
+        combined.successful_requests += result.successful_requests
+        for error in result.errors:
+            if expected and expected.matches(error):
+                combined.expected_failures.append(
+                    f"{source.name}: expected failure ({expected.reason}): {error}"
+                )
+            else:
+                combined.errors.append(error)
+        if expected and (
+            result.candidates
+            or result.successful_requests
+            or (not result.errors and not result.expected_failures)
+        ):
+            combined.notices.append(
+                f"{source.name}: UNEXPECTED SUCCESS for a source marked expected-to-fail "
+                f"({expected.reason}); clear the registry flag if access is reliable."
+            )
     return combined

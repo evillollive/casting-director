@@ -36,6 +36,7 @@ class RedditSource:
             except Exception as exc:
                 result.errors.append(f"Reddit r/{subreddit}: {exc}")
                 continue
+            result.successful_requests += 1
             for child in data.get("data", {}).get("children", []):
                 post = child.get("data") or {}
                 if float(post.get("created_utc") or 0) <= since.timestamp():
