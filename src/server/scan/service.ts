@@ -302,6 +302,7 @@ export async function getScan(
   const shippable = scan.status === "COMPLETED" && scan.evalPassed === true;
   return {
     ...scan,
+    sourceProgress: scan.sources,
     reportMarkdown: shippable ? scan.reportMarkdown : null,
     diagnosticReportMarkdown:
       scan.status === "FAILED" ? scan.reportMarkdown : null,

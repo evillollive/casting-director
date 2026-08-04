@@ -12,7 +12,7 @@ export type AuthenticationResult =
 
 export interface AuthAdapter {
   authenticate(request: Request): Promise<AuthenticationResult>;
-  revokeSession(sessionId: string): Promise<void>;
+  revokeSession(request: Request): Promise<void>;
 }
 
 export class AuthenticationRequiredError extends Error {

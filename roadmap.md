@@ -34,16 +34,17 @@ Passing the evaluator is necessary but not sufficient. If the shortlist does not
 
 ### Implementation status
 
-Layers 1 and 2 are implemented. The application foundation now includes a
+Layers 1 through 3 are implemented. The application now includes a
 provider-neutral durable scan job/lease engine, a separately run worker,
-authenticated workspace-scoped scan APIs, exact execution snapshots, and a
-machine-readable boundary around the canonical Python Tier 1 engine.
+authenticated workspace-scoped product APIs, explicit session provisioning,
+exact execution snapshots, and functional server-rendered/live Shortlist,
+Live scan, Rolodex, Tuning, Taste log, and Scan history surfaces.
 
 The static `web/` app and Python Tier 0/Tier 1 engine remain authoritative and
-available. Live database pages, candidate/tuning/taste write routes,
-repository-backed two-way sync, backups, and deployment topology remain
-follow-on layers. The scan worker calls the existing Python prompt builder and
-evaluator rather than translating their rules into TypeScript.
+available. Repository-backed two-way sync, operational backups, and deployment
+topology remain layer 4. The scan worker and tuning preview call the existing
+Python prompt builder and evaluator rather than translating their rules into
+TypeScript.
 
 ### Build threshold and operating cost
 

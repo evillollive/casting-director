@@ -5,7 +5,8 @@ import { usePathname } from "next/navigation";
 
 const items = [
   { href: "/", label: "Shortlist", shortLabel: "S" },
-  { href: "/scans", label: "Scans", shortLabel: "R" },
+  { href: "/scans/live", label: "Live scan", shortLabel: "L" },
+  { href: "/scans", label: "History", shortLabel: "H" },
   { href: "/rolodex", label: "Rolodex", shortLabel: "C" },
   { href: "/tuning", label: "Tuning", shortLabel: "T" },
   { href: "/taste-log", label: "Taste log", shortLabel: "L" },

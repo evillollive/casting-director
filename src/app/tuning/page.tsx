@@ -1,48 +1,53 @@
+import { AccessState } from "@/components/access-state";
 import { PageHeading } from "@/components/page-heading";
+import { TuningEditor } from "@/app/tuning/tuning-editor";
+import { prisma } from "@/server/db";
+import { resolvePageAccess } from "@/server/auth/page-auth";
 
+export const dynamic = "force-dynamic";
 export const metadata = { title: "Tuning" };
 
-export default function TuningPage() {
+export default async function TuningPage() {
+  const access = await resolvePageAccess();
+  if (access.state !== "authenticated") {
+    return <div className="page-stack"><AccessState access={access} /></div>;
+  }
+  const config = await prisma.tuningConfig.findUnique({
+    where: { workspaceId: access.principal.workspaceId },
+    include: {
+      activeRevision: { include: { items: { orderBy: { position: "asc" } } } },
+      revisions: {
+        orderBy: { revision: "desc" },
+        include: {
+          createdBy: { select: { displayName: true } },
+          items: { orderBy: { position: "asc" } },
+        },
+      },
+    },
+  });
+  const revision = config?.activeRevision;
+  const splitItems = (items: NonNullable<typeof revision>["items"] | undefined, kind: "HARD_NO" | "MORE_OF") =>
+    items?.filter((item) => item.kind === kind).map((item) => item.value) ?? [];
   return (
     <div className="page-stack">
-      <PageHeading
-        eyebrow="Editorial configuration"
-        title="Tuning"
-        description="Workspace tuning changes create immutable revisions so every scan remains reproducible."
-        action={
-          <button className="primary-button" disabled>
-            Save revision
-          </button>
-        }
+      <PageHeading eyebrow="Editorial configuration" title="Tuning" description="Edit operational focus, preview the exact Python-generated prompt, and preserve every immutable revision." />
+      <TuningEditor
+        initial={{
+          version: config?.version ?? 1,
+          beat: revision?.beat ?? "Open-ended stories with a visible human journey.",
+          hardNos: splitItems(revision?.items, "HARD_NO"),
+          moreOf: splitItems(revision?.items, "MORE_OF"),
+        }}
+        revisions={config?.revisions.map((item) => ({
+          id: item.id,
+          revision: item.revision,
+          beat: item.beat,
+          createdAt: item.createdAt.toISOString(),
+          createdBy: item.createdBy,
+          hardNos: splitItems(item.items, "HARD_NO"),
+          moreOf: splitItems(item.items, "MORE_OF"),
+        })) ?? []}
       />
-      <section className="form-card">
-        <label>
-          <span>Beat / theme focus</span>
-          <textarea
-            disabled
-            placeholder="What should the desk pay attention to right now?"
-          />
-        </label>
-        <div className="form-columns">
-          <label>
-            <span>Hard nos</span>
-            <textarea disabled placeholder="One editorial exclusion per line" />
-          </label>
-          <label>
-            <span>More of</span>
-            <textarea disabled placeholder="One desired pattern per line" />
-          </label>
-        </div>
-      </section>
-      <section className="boundary-card">
-        <p className="eyebrow">Canonical boundary</p>
-        <h2>Tuning does not rewrite the rubric</h2>
-        <p>
-          Prompt generation continues to source the existing Tier 0 prompt,
-          rubric, and Python evaluator. This app stores operational revisions
-          and exact scan snapshots only.
-        </p>
-      </section>
     </div>
   );
 }

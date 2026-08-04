@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { SessionControl } from "./session-control";
 import { WorkspaceNav } from "./workspace-nav";
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -13,9 +14,12 @@ export function AppShell({ children }: { children: ReactNode }) {
             </span>
             <span>casting-director</span>
           </Link>
-          <div className="workspace-chip">
-            <span className="presence-dot" aria-hidden="true" />
-            Casting workspace
+          <div className="header-session">
+            <div className="workspace-chip">
+              <span className="presence-dot" aria-hidden="true" />
+              Tier 2 workspace
+            </div>
+            <SessionControl />
           </div>
         </div>
         <WorkspaceNav />

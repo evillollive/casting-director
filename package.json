@@ -17,6 +17,7 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
     "db:import-memory": "tsx scripts/import-memory.ts",
+    "auth:bootstrap": "tsx scripts/bootstrap-auth.ts",
     "worker": "tsx src/worker/cli.ts"
   },
   "dependencies": {

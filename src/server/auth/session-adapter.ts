@@ -78,9 +78,11 @@ export class DatabaseSessionAuthAdapter implements AuthAdapter {
     };
   }
 
-  async revokeSession(sessionId: string): Promise<void> {
-    await this.database.authSession.update({
-      where: { id: sessionId },
+  async revokeSession(request: Request): Promise<void> {
+    const token = sessionToken(request);
+    if (!token) return;
+    await this.database.authSession.updateMany({
+      where: { tokenHash: tokenHash(token), revokedAt: null },
       data: { revokedAt: new Date(), version: { increment: 1 } },
     });
   }

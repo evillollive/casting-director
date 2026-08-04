@@ -73,6 +73,18 @@ The session adapter accepts a bearer token or `casting_session` cookie, hashes
 the token, verifies an unrevoked session and active user, and requires
 membership in `CASTING_WORKSPACE_SLUG`.
 
+Provision the first workspace and expiring session explicitly:
+
+```bash
+npm run auth:bootstrap -- --email you@example.com --name "Your name"
+```
+
+Enter the returned token at `/sign-in`. The application exchanges it for an
+HTTP-only, same-site cookie (also `Secure` in production). There is no fallback
+development user, and product writes always authenticate the database session
+and workspace membership. `AuthAdapter` remains the replaceable boundary for a
+future external identity provider.
+
 ```text
 POST /api/scans
 GET  /api/scans?limit=25&status=FAILED&from=2026-08-01
@@ -84,3 +96,22 @@ pagination and structured date/status/summary filters. Detail responses include
 source progress, counts, retry state, failures, candidates, and evaluator
 violations. Exact prompt, tuning, taste-log, and non-secret model snapshots plus
 SHA-256 hashes remain attached to the scan audit record.
+
+## Layer 3 product APIs and pages
+
+Authenticated candidate APIs provide cursor pagination, text search and
+roadmap filters, optimistic single-candidate edits, append-only authored notes,
+normalized workspace tags, status audit rows, and atomic bulk changes for
+explicit IDs. Tuning writes create immutable revisions; taste-log corrections
+preserve authorship and revision audit data.
+
+The live application includes Shortlist, Live scan, Rolodex, Tuning, Taste log,
+and Scan history. The tuning preview runs through
+`tools/prompt_builder.py`; the TypeScript application does not contain a second
+rubric or evaluator. Failed scans retain source errors, retry state, evaluator
+violations, and an optional diagnostic report, but only completed,
+evaluator-passing reports appear on Shortlist.
+
+Repository two-way sync, backups, and deployment topology are intentionally
+deferred to layer 4. The static `web/` application remains the supported
+no-infrastructure path.

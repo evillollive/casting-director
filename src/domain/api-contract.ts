@@ -44,6 +44,8 @@ export const candidateQuerySchema = paginationSchema.extend({
   gatePassed: queryBooleanSchema.optional(),
   doNotResurface: queryBooleanSchema.optional(),
   notForSurfacing: queryBooleanSchema.optional(),
+  sort: z.enum(["updatedAt", "score", "name"]).default("updatedAt"),
+  direction: z.enum(["asc", "desc"]).default("desc"),
 });
 
 const candidatePatchFields = z.object({
@@ -58,6 +60,10 @@ const candidatePatchFields = z.object({
 export const candidatePatchSchema = candidatePatchFields
   .extend({ version: z.number().int().positive() })
   .refine(
+    ({ tagIds }) => !tagIds || new Set(tagIds).size === tagIds.length,
+    { path: ["tagIds"], message: "tagIds must not contain duplicates." },
+  )
+  .refine(
     (patch) =>
       Object.entries(patch).some(
         ([key, value]) => key !== "version" && value !== undefined,
@@ -70,6 +76,17 @@ export const candidateBulkPatchSchema = candidatePatchFields
   .extend({
     candidateIds: z.array(z.string().min(1)).min(1).max(100),
   })
+  .refine(
+    ({ candidateIds }) => new Set(candidateIds).size === candidateIds.length,
+    {
+      path: ["candidateIds"],
+      message: "candidateIds must not contain duplicates.",
+    },
+  )
+  .refine(
+    ({ tagIds }) => !tagIds || new Set(tagIds).size === tagIds.length,
+    { path: ["tagIds"], message: "tagIds must not contain duplicates." },
+  )
   .refine(
     (patch) =>
       Object.entries(patch).some(
@@ -103,7 +120,15 @@ export const tuningUpdateSchema = z.object({
   beat: z.string().trim().min(1).max(4_000),
   hardNos: z.array(z.string().trim().min(1).max(1_000)).max(100),
   moreOf: z.array(z.string().trim().min(1).max(1_000)).max(100),
-});
+}).refine(
+  ({ hardNos }) => new Set(hardNos).size === hardNos.length,
+  { path: ["hardNos"], message: "hardNos must not contain duplicates." },
+).refine(
+  ({ moreOf }) => new Set(moreOf).size === moreOf.length,
+  { path: ["moreOf"], message: "moreOf must not contain duplicates." },
+);
+
+export const tasteLogQuerySchema = paginationSchema;
 
 export const tasteLogCreateSchema = z.object({
   weekOf: z.iso.date(),

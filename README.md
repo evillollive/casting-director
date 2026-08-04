@@ -51,7 +51,7 @@ implementations automate that contract without replacing it.
 | [`tools/prompt_builder.py`](tools/prompt_builder.py) | Builds the screening prompt from the canonical Tier 0 markdown, current rolodex, TUNING, and recent taste-log lines. |
 | [`tools/sources/`](tools/sources/) | Public HTTP connectors for Hacker News, GitHub, Reddit, Hackaday, and itch.io, all returning one shared candidate shape. |
 | [`web/`](web/) | A static browser app: prep this week's prompt with your rolodex baked in, then lint a run's shortlist with an in-browser port of the evaluator. No account, no API key, nothing uploaded. Deployed to GitHub Pages. |
-| [`src/app/`](src/app/) | The Tier 2 Next.js workspace foundation. It is intentionally separate from the static Pages app and does not replace the no-infrastructure path. |
+| [`src/app/`](src/app/) | The authenticated Tier 2 Next.js product: shortlist, live scans, rolodex, tuning, taste history, and immutable scan history. It remains separate from the static Pages app. |
 | [`prisma/`](prisma/) | The Tier 2 Postgres schema and migration, including relational rolodex history, scan audit data, immutable tuning and taste revisions, and database quality gates. |
 | [`src/domain/`](src/domain/) | Provider-neutral typed API and lifecycle contracts. The canonical rubric and evaluator are not duplicated here. |
 | [`tests/`](tests/) | The test suite: spec-conformance checks plus adversarial output fixtures. See [`tests/README.md`](tests/README.md). |
@@ -124,11 +124,12 @@ The app fetches the real prompt, rubric, and sources from `web/content/`, which 
 
 ## Run Tier 2
 
-Tier 2 layers 1 and 2 add a server-rendered Next.js application, authenticated
-scan APIs, Postgres persistence, and a separately run durable worker while
-keeping `web/` and the Python engine authoritative. The worker calls the
-canonical Python sourcing, prompt, screening, rendering, and evaluator modules;
-it does not duplicate the rubric in TypeScript.
+Tier 2 layers 1 through 3 add a server-rendered Next.js application,
+authenticated product APIs, Postgres persistence, and a separately run durable
+worker while keeping `web/` and the Python engine authoritative. The worker and
+tuning preview call the canonical Python sourcing, prompt, screening,
+rendering, and evaluator modules; they do not duplicate the rubric in
+TypeScript.
 
 Requirements are Node.js 20.9 or newer and PostgreSQL. Configure the variables
 in [`.env.example`](.env.example), then run:
@@ -136,10 +137,18 @@ in [`.env.example`](.env.example), then run:
 ```bash
 npm ci
 npm run db:migrate
+npm run auth:bootstrap -- --email you@example.com --name "Your name"
 npm run dev
 # in a second process
 npm run worker
 ```
+
+The bootstrap command explicitly creates the first workspace membership and a
+random, expiring session token. Enter that token at `/sign-in`; the browser
+stores it only in an HTTP-only, same-site cookie. Production never assumes a
+development identity or permits unauthenticated product writes. Add later team
+members by rerunning the command with their email and name. The first member is
+an administrator and subsequent members are regular members.
 
 The health endpoint at `/api/health` reports database readiness, fresh workers,
 queued jobs, and expired leases without returning secret values. Run
@@ -148,6 +157,13 @@ queued jobs, and expired leases without returning secret values. Run
 deployment provider neutral: use any Node.js runtime and PostgreSQL service
 that preserve durable jobs and backups. See
 [`docs/tier2-scan-engine.md`](docs/tier2-scan-engine.md).
+
+Authenticated pages are available at `/` (Shortlist), `/scans/live`,
+`/scans`, `/rolodex`, `/tuning`, and `/taste-log`. The product APIs cover
+candidate filters and cursor pagination, optimistic candidate edits and bulk
+actions, immutable tuning revisions, revisioned taste observations, and durable
+scan polling/history. Failed scan output is exposed only as diagnostic output,
+never as a shippable shortlist.
 
 Prisma models durable users and workspace membership, authentication identities
 and sessions, candidate identity and merge provenance, normalized tags,
@@ -171,7 +187,8 @@ npm run db:import-memory -- --write --actor editor@example.com
 
 The actor is required when taste-log rows exist so authorship is preserved.
 This command is the bootstrap path only. Conflict-aware two-way repository sync
-belongs to a later layer. Interface adaptation provenance is recorded in
+belongs to layer 4, together with backups and deployment topology. Interface
+adaptation provenance is recorded in
 [`docs/tier2-provenance.md`](docs/tier2-provenance.md).
 
 ## The build path, in one breath

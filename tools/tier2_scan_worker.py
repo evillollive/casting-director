@@ -14,7 +14,7 @@ from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 
 from dedupe import SeenStore, dedupe_candidates
-from prompt_builder import build_prompt_from_text
+from prompt_builder import build_prompt_from_snapshots
 from render_report import render_report, select_shortlist
 from screen import LlmClient, ScreenConfigurationError, ScreenResponseError, screen_candidates
 from sources import RawCandidate, collect_sources, sources_by_key
@@ -203,11 +203,11 @@ def execute(request: dict, event_sink=emit, *, connectors=None, client=None) -> 
     if not survivors:
         raise PipelineError("no unseen candidates survived source collection and dedupe")
 
-    prompt = build_prompt_from_text(
+    prompt = build_prompt_from_snapshots(
         template=request["prompt_template"],
-        dnr_markdown=dnr,
-        taste_markdown=_taste_markdown(request.get("taste_log", [])),
-        tuning=_tuning(request.get("tuning", {})),
+        do_not_resurface=request.get("do_not_resurface", []),
+        taste_log=request.get("taste_log", []),
+        tuning=request.get("tuning", {}),
     )
     event_sink(
         {
