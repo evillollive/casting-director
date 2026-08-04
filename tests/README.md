@@ -1,6 +1,6 @@
 # Tests
 
-Four layers cover the canonical spec, generated reports, the Tier 1 pipeline, and the browser port.
+Five layers cover the canonical spec, generated reports, the Tier 1 pipeline, the browser port, and live brief quality.
 
 ## 1. Spec conformance (`test_spec_conformance.py`)
 
@@ -59,6 +59,29 @@ These tests use stubbed HTTP responses only. They cover paginated Hacker News co
 ## 4. Browser parity (`test_web_content_sync.py`, `test_web_eval_parity.py`)
 
 The static app's mirrored markdown must remain byte-identical to the canonical files. When Node is available, every evaluator fixture is also checked against both the Python and JavaScript implementations.
+
+## 5. Live verification (manual)
+
+This layer requires live network access and repository credentials, so it does not run in offline CI. It is the only layer that can judge whether the output has editorial taste rather than merely satisfying the report contract.
+
+Before running it, configure `CASTING_LLM_API_KEY` as an Actions secret and configure `CASTING_LLM_API_URL` and `CASTING_LLM_MODEL` as repository variables. Then:
+
+1. Manually dispatch [`.github/workflows/weekly-scan.yml`](../.github/workflows/weekly-scan.yml) with `dry_run` left at its default `true`.
+2. Download the run's uploaded artifact, open `weekly-report.md`, and read the briefs.
+3. Confirm that `casting_eval.py` passed, then judge whether the shortlist reads like people worth a conversation rather than link slop.
+4. Check the run log for the Reddit connector result and record the hosted-runner access finding in [`sources.md`](../sources.md).
+
+With `dry_run: true`, the workflow still sources candidates, screens them, renders the report, and runs the evaluator. It uploads the report instead of opening an Issue and does not advance [`rolodex/seen.json`](../rolodex/seen.json), so the first run cannot burn candidates before a human reads the output.
+
+An evaluator pass is necessary but not sufficient. The evaluator checks the mechanical half of the contract, but it cannot check taste. If the shortlist is weak, diagnose these stages in order because failures in any of them can produce the same weak output:
+
+1. **Prompt assembly:** Verify that the built prompt contains the canonical rubric, the TUNING block, the do-not-resurface list, and the recent taste-log lines.
+2. **Screening call:** Verify that returned briefs are structurally complete and that the gates are applied as written.
+3. **Source mix:** Verify that the feeds return castable people rather than only launches.
+
+The first dispatch is also the first hosted-runner test of the Reddit connector. Earlier probes used a residential IP, while hosted runners use datacenter IPs that Reddit blocks more aggressively. The connector labels an HTTP 401 or 403 as `blocked from this runner IP` and records an isolated source error instead of failing the run. If that label appears, the fix is the OAuth upgrade documented in [`sources.md`](../sources.md). Update `sources.md` with the result whether access succeeds or fails because that file records real source access conditions.
+
+This verification carries forward into Tier 2. Repeat it after any change to the rubric, prompt assembly, or source mix.
 
 ## Running
 
