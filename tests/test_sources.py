@@ -10,6 +10,7 @@ from sources import (
     HackadaySource,
     HackerNewsSource,
     HttpClient,
+    HttpResponse,
     ItchSource,
     RawCandidate,
     RedditSource,
@@ -136,36 +137,161 @@ def test_github_searches_recent_starred_repositories_and_reads_readme():
     assert readme_call["headers"]["Authorization"] == "Bearer token"
 
 
-def test_reddit_reports_one_subreddit_failure_and_keeps_other_results():
-    good_url = "https://www.reddit.com/r/opensource/new.json"
-    bad_url = "https://www.reddit.com/r/webdev/new.json"
-    client = StubHttp(
-        json_by_url={
-            good_url: {
-                "data": {
-                    "children": [
-                        {
-                            "data": {
-                                "id": "abc",
-                                "created_utc": SINCE.timestamp() + 60,
-                                "title": "I built a tactile debugger",
-                                "author": "builder",
-                                "permalink": "/r/opensource/comments/abc/demo/",
-                                "url_overridden_by_dest": "https://github.com/builder/demo",
-                                "selftext": "Build notes",
-                            }
-                        }
-                    ]
-                }
-            }
-        },
-        errors={bad_url},
+ATOM = """<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <entry>
+    <title>I built a tactile debugger</title>
+    <updated>2026-08-02T12:00:00+00:00</updated>
+    <id>t3_abc</id>
+    <link href="https://www.reddit.com/r/opensource/comments/abc/demo/" />
+    <author>
+      <name>/u/builder</name>
+      <uri>https://www.reddit.com/user/builder/</uri>
+    </author>
+    <content type="html">&lt;!-- SC_OFF --&gt;&lt;div&gt;Build &amp;amp; notes&lt;/div&gt;</content>
+  </entry>
+  <entry>
+    <title>Old project</title>
+    <updated>2026-07-01T12:00:00+00:00</updated>
+    <id>t3_old</id>
+    <link href="https://www.reddit.com/r/opensource/comments/old/demo/" />
+    <author><name>/u/oldbuilder</name></author>
+    <content type="html">Old notes</content>
+  </entry>
+</feed>"""
+
+
+class RedditHttp:
+    def __init__(self, responses):
+        self.responses = responses
+        self.calls = []
+
+    def get_response(self, url, **kwargs):
+        self.calls.append((url, kwargs))
+        response = self.responses[url]
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+
+def atom_response(body=ATOM, headers=None):
+    return HttpResponse(
+        body=body.encode("utf-8"),
+        headers={"content-type": "application/atom+xml", **(headers or {})},
+        status=200,
     )
-    result = RedditSource(client, subreddits=["opensource", "webdev"]).fetch(SINCE)
-    assert [candidate.fingerprint for candidate in result.candidates] == ["reddit:abc"]
-    assert result.candidates[0].source_family == "reddit"
-    assert result.errors == ["Reddit r/webdev: blocked"]
-    assert "casting-director/1.0" in client.calls[0][2]["headers"]["User-Agent"]
+
+
+def test_reddit_atom_parses_author_fingerprint_context_and_date_window():
+    url = "https://www.reddit.com/r/opensource/new.rss"
+    client = RedditHttp({url: atom_response()})
+
+    result = RedditSource(client, subreddits=["opensource"], sleeper=lambda _: None).fetch(SINCE)
+
+    assert result.errors == []
+    assert result.successful_requests == 1
+    assert len(result.candidates) == 1
+    candidate = result.candidates[0]
+    assert candidate.name == "builder"
+    assert candidate.handle == "builder"
+    assert candidate.fingerprint == "reddit:t3_abc"
+    assert candidate.source_family == "reddit"
+    assert candidate.source_url == "https://www.reddit.com/r/opensource/comments/abc/demo/"
+    assert "Public profile: https://www.reddit.com/user/builder/" in candidate.context
+    assert "Build & notes" in candidate.context
+    assert "SC_OFF" not in candidate.context
+    assert client.calls[0][0].endswith("/r/opensource/new.rss")
+    assert "casting-director/1.0" in client.calls[0][1]["headers"]["User-Agent"]
+
+
+def test_reddit_sleeps_from_reset_header_between_subreddits():
+    first = "https://www.reddit.com/r/opensource/new.rss"
+    second = "https://www.reddit.com/r/selfhosted/new.rss"
+    sleeps = []
+    client = RedditHttp(
+        {
+            first: atom_response(
+                headers={"x-ratelimit-remaining": "0.0", "x-ratelimit-reset": "19"}
+            ),
+            second: atom_response(ATOM.replace("t3_abc", "t3_def")),
+        }
+    )
+
+    result = RedditSource(
+        client,
+        subreddits=["opensource", "selfhosted"],
+        sleeper=sleeps.append,
+    ).fetch(SINCE)
+
+    assert [call[0] for call in client.calls] == [first, second]
+    assert sleeps == [19.0]
+    assert len(result.candidates) == 2
+
+
+def test_reddit_429_backs_off_and_continues_as_an_isolated_error():
+    first = "https://www.reddit.com/r/opensource/new.rss"
+    second = "https://www.reddit.com/r/selfhosted/new.rss"
+    sleeps = []
+    limited = urllib.error.HTTPError(
+        first,
+        429,
+        "Too Many Requests",
+        {"x-ratelimit-reset": "23"},
+        None,
+    )
+    client = RedditHttp({first: limited, second: atom_response()})
+
+    result = collect_sources(
+        [
+            RedditSource(
+                client,
+                subreddits=["opensource", "selfhosted"],
+                sleeper=sleeps.append,
+            )
+        ],
+        SINCE,
+    )
+
+    assert sleeps == [23.0]
+    assert len(result.candidates) == 1
+    assert result.errors == ["Reddit r/opensource: rate limited (HTTP 429)"]
+
+
+def test_reddit_block_is_labeled_as_runner_ip_access_failure():
+    url = "https://www.reddit.com/r/opensource/new.rss"
+    blocked = urllib.error.HTTPError(url, 403, "Blocked", {}, None)
+    result = RedditSource(
+        RedditHttp({url: blocked}),
+        subreddits=["opensource"],
+        sleeper=lambda _: None,
+    ).fetch(SINCE)
+
+    assert result.candidates == []
+    assert result.errors == ["Reddit r/opensource: blocked from this runner IP (HTTP 403)"]
+
+
+def test_reddit_runner_ip_block_can_use_expected_failure_safety_net():
+    url = "https://www.reddit.com/r/opensource/new.rss"
+    blocked = urllib.error.HTTPError(url, 403, "Blocked", {}, None)
+    source = RedditSource(
+        RedditHttp({url: blocked}),
+        subreddits=["opensource"],
+        sleeper=lambda _: None,
+    )
+
+    result = collect_sources(
+        [
+            SourceRegistration(
+                source,
+                ExpectedFailure("RSS blocked from hosted runner IP", (401, 403)),
+            )
+        ],
+        SINCE,
+    )
+
+    assert result.errors == []
+    assert len(result.expected_failures) == 1
+    assert "blocked from this runner IP (HTTP 403)" in result.expected_failures[0]
 
 
 RSS = """<?xml version="1.0"?>
@@ -382,13 +508,11 @@ def test_expected_to_fail_source_keeps_off_pattern_failure_real():
     assert result.messages()[0].startswith("ERROR:")
 
 
-def test_default_registry_marks_reddit_expected_to_fail_only_for_auth_statuses():
+def test_default_registry_treats_reddit_as_a_normal_source():
     reddit = next(
         item
         for item in default_sources(StubHttp())
-        if isinstance(item, SourceRegistration)
-        and isinstance(item.connector, RedditSource)
+        if isinstance(item, RedditSource)
     )
 
-    assert reddit.expected_failure.reason == "anonymous JSON is blocked without OAuth"
-    assert reddit.expected_failure.status_codes == (401, 403)
+    assert not isinstance(reddit, SourceRegistration)

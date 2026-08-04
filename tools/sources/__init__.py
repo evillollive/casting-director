@@ -4,6 +4,7 @@ from __future__ import annotations
 from .base import (
     ExpectedFailure,
     HttpClient,
+    HttpResponse,
     RawCandidate,
     SourceFetch,
     SourceRegistration,
@@ -22,13 +23,7 @@ def default_sources(client: HttpClient | None = None):
     return [
         HackerNewsSource(http),
         GitHubSource(http),
-        SourceRegistration(
-            RedditSource(http),
-            expected_failure=ExpectedFailure(
-                reason="anonymous JSON is blocked without OAuth",
-                status_codes=(401, 403),
-            ),
-        ),
+        RedditSource(http),
         HackadaySource(http),
         ItchSource(http),
     ]
@@ -39,6 +34,7 @@ __all__ = [
     "HackadaySource",
     "HackerNewsSource",
     "HttpClient",
+    "HttpResponse",
     "ItchSource",
     "RawCandidate",
     "RedditSource",

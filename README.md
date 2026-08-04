@@ -84,7 +84,7 @@ python tools/weekly_scan.py \
   --run-date "$(date -u +%Y-%m-%d)"
 ```
 
-Reddit is currently registered as expected-to-fail only for anonymous HTTP 401/403 responses. A future OAuth implementation should read `REDDIT_CLIENT_ID` and `REDDIT_CLIENT_SECRET` from secrets plus a descriptive `REDDIT_USER_AGENT` setting. Once those credentials are wired into the connector and verified, remove the `ExpectedFailure` wrapper around `RedditSource` in [`tools/sources/__init__.py`](tools/sources/__init__.py). That flag removal is the only registry change needed to treat Reddit failures normally.
+Reddit uses the official public per-subreddit Atom feeds and adapts to their strict reset headers. If hosted runners consistently block those feeds with HTTP 401/403, wrap `RedditSource` in the existing `ExpectedFailure` registration in [`tools/sources/__init__.py`](tools/sources/__init__.py) so known IP blocking stays distinct from connector errors. A future OAuth throughput upgrade should read `REDDIT_CLIENT_ID` and `REDDIT_CLIENT_SECRET` from secrets plus a descriptive `REDDIT_USER_AGENT` setting.
 
 The durable seen list lives at [`rolodex/seen.json`](rolodex/seen.json) and is committed after each successful scheduled run, so resets are visible in git history. Shortlisted and hard-excluded candidates stay there permanently. Parking-lot candidates receive an eight-week cooldown and can return when their timing changes. The rollout imports the old Actions-cached `.casting/seen.json` once when available. If a non-empty run starts from an empty seen store, the report carries a loud warning for human review.
 

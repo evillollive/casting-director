@@ -44,6 +44,13 @@ class SourceFetch:
         )
 
 
+@dataclass(frozen=True)
+class HttpResponse:
+    body: bytes
+    headers: dict[str, str]
+    status: int
+
+
 class Source(Protocol):
     name: str
 
@@ -58,7 +65,7 @@ class ExpectedFailure:
     def matches(self, error) -> bool:
         code = getattr(error, "code", None)
         if code is None:
-            match = re.search(r"\bHTTP Error (\d{3})\b", str(error))
+            match = re.search(r"\bHTTP(?: Error)?\s+(\d{3})\b", str(error))
             code = int(match.group(1)) if match else None
         return code in self.status_codes
 
@@ -94,6 +101,23 @@ class HttpClient:
         timeout: int = 20,
         retry: bool = False,
     ) -> bytes:
+        return self.get_response(
+            url,
+            params=params,
+            headers=headers,
+            timeout=timeout,
+            retry=retry,
+        ).body
+
+    def get_response(
+        self,
+        url: str,
+        *,
+        params: dict | None = None,
+        headers: dict | None = None,
+        timeout: int = 20,
+        retry: bool = False,
+    ) -> HttpResponse:
         if params:
             query = urllib.parse.urlencode(params)
             url = f"{url}{'&' if '?' in url else '?'}{query}"
@@ -104,7 +128,15 @@ class HttpClient:
         for attempt in range(retries + 1):
             try:
                 with self.opener(request, timeout=timeout) as response:
-                    return response.read()
+                    response_headers = {
+                        str(key).lower(): str(value)
+                        for key, value in response.headers.items()
+                    }
+                    return HttpResponse(
+                        body=response.read(),
+                        headers=response_headers,
+                        status=int(getattr(response, "status", 200)),
+                    )
             except urllib.error.HTTPError as exc:
                 retryable = exc.code == 429 or 500 <= exc.code < 600
                 if not retryable or attempt >= retries:
