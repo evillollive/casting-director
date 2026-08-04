@@ -17,10 +17,10 @@ Zero infrastructure. One rich prompt that names your sources and your rubric, ru
 Once the rubric is stable, codify it. The repository now includes this GitHub-native workflow:
 
 - [`tools/weekly_scan.py`](tools/weekly_scan.py) pulls candidates from the public feeds using the query patterns in [`sources.md`](sources.md).
-- It dedupes against [`rolodex/do-not-resurface.md`](rolodex/do-not-resurface.md) and a persisted seen list, then assembles the run prompt from the canonical markdown, current TUNING, and recent taste-log lines.
+- It dedupes against [`rolodex/do-not-resurface.md`](rolodex/do-not-resurface.md) and the git-tracked [`rolodex/seen.json`](rolodex/seen.json), then assembles the run prompt from the canonical markdown, current TUNING, and recent taste-log lines. Final cuts remain permanent, while parking-lot candidates can return after an eight-week cooldown.
 - It sends survivors to a configurable model endpoint for structured briefs and applies Protagonist >= 3 and Visible hook >= 3 as the only mechanical shortlist gates.
 - It renders the exact Tier 0 report format and gates the report through [`tools/casting_eval.py`](tools/casting_eval.py).
-- [`.github/workflows/weekly-scan.yml`](.github/workflows/weekly-scan.yml) runs on a cron or manual dispatch and opens a GitHub Issue only after the evaluator exits successfully.
+- [`.github/workflows/weekly-scan.yml`](.github/workflows/weekly-scan.yml) runs on a cron or manual dispatch, commits successful seen-state changes to `main`, and opens a GitHub Issue only after the evaluator exits successfully.
 
 ## Tier 2: small app with a real rolodex
 

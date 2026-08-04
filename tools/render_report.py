@@ -77,12 +77,17 @@ def render_report(
     *,
     reviewed_count: int,
     sources_scanned: list[str] | None = None,
+    warnings: list[str] | None = None,
 ) -> str:
     shortlist = select_shortlist(briefs)
     parking = select_parking(briefs, shortlist)
     sources = ", ".join(sources_scanned or sorted({brief.candidate.source for brief in briefs}))
     quiet = f" Quiet week: only {len(shortlist)} credible shortlist entries." if len(shortlist) < 5 else ""
-    lines = [f"Summary: Scanned {sources or 'the configured feeds'}; reviewed {reviewed_count} candidates.{quiet}", ""]
+    warning = " " + " ".join(f"WARNING: {item}" for item in (warnings or [])) if warnings else ""
+    lines = [
+        f"Summary: Scanned {sources or 'the configured feeds'}; reviewed {reviewed_count} candidates.{quiet}{warning}",
+        "",
+    ]
     lines.extend(["### Shortlist", ""])
     for brief in shortlist:
         lines.extend(_brief_lines(brief))

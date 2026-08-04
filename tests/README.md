@@ -54,7 +54,7 @@ The fixtures in `fixtures/` are simulated run outputs, each engineered to trigge
 
 ## 3. Tier 1 pipeline (`test_prompt_builder.py`, `test_sources.py`, `test_pipeline.py`)
 
-These tests use stubbed HTTP responses only. They cover the exact public request shapes for Hacker News, GitHub, and Reddit; RSS parsing for Hackaday and itch.io; per-source failure tolerance; prompt assembly from canonical markdown; persisted dedupe; provider configuration errors; real gate behavior without an average threshold; and an end-to-end rendered report that must pass `casting_eval.py`.
+These tests use stubbed HTTP responses only. They cover the exact public request shapes for Hacker News, GitHub, and Reddit; RSS parsing for Hackaday and itch.io; per-source failure tolerance; prompt assembly from canonical markdown; permanent and cooldown-based dedupe; empty-state warnings; provider configuration errors; real gate behavior without an average threshold; and an end-to-end rendered report that must pass `casting_eval.py`.
 
 ## 4. Browser parity (`test_web_content_sync.py`, `test_web_eval_parity.py`)
 

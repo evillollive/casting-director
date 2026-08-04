@@ -1,14 +1,17 @@
 """Tier 1 dedupe, gates, rendering, and evaluator integration."""
 from __future__ import annotations
 
+import json
 from dataclasses import replace
+from datetime import date
 from pathlib import Path
 
 import casting_eval as ce
 from dedupe import SeenStore, dedupe_candidates
 from render_report import render_report, select_shortlist
 from screen import CastingBrief, ScreenConfigurationError, ScreenResponseError, brief_from_mapping
-from sources import RawCandidate
+from sources import RawCandidate, SourceFetch
+from weekly_scan import load_seen_store, remember_screening_results, run_pipeline
 
 
 def raw(
@@ -69,7 +72,7 @@ def test_dedupe_uses_canonical_normalization_and_persisted_seen_list(tmp_path: P
     store_path = tmp_path / "seen.json"
     store = SeenStore(store_path).load()
     first = raw(1)
-    store.record([first], seen_on="2026-08-01")
+    store.record_permanent([first], seen_on="2026-08-01")
     store.save()
     resurfaced = replace(raw(2), name="Jane Builder", handle="@janeb")
     dnr = (
@@ -101,6 +104,94 @@ def test_dedupe_does_not_merge_unrelated_people_with_a_common_project_title(tmp_
 
     assert result.survivors == [first, second]
     assert result.seen == []
+
+
+def test_parked_candidate_returns_after_cooldown_but_shortlisted_candidate_does_not(tmp_path: Path):
+    shortlisted = raw(1)
+    parked = raw(2)
+    store_path = tmp_path / "seen.json"
+    store = SeenStore(store_path).load()
+    store.record_permanent([shortlisted], seen_on="2026-08-03")
+    store.record_parked([parked], parked_on="2026-08-03")
+    store.save()
+
+    before = dedupe_candidates(
+        [shortlisted, parked],
+        dnr_markdown="| Name / handle | Project |\n|---|---|\n",
+        seen_store=SeenStore(store_path).load(),
+        as_of=date.fromisoformat("2026-09-27"),
+    )
+    after = dedupe_candidates(
+        [shortlisted, parked],
+        dnr_markdown="| Name / handle | Project |\n|---|---|\n",
+        seen_store=SeenStore(store_path).load(),
+        as_of=date.fromisoformat("2026-09-28"),
+    )
+
+    assert before.survivors == []
+    assert before.seen == [shortlisted, parked]
+    assert after.survivors == [parked]
+    assert after.seen == [shortlisted]
+
+
+def test_screening_memory_splits_shortlist_parking_and_hard_exclusions(tmp_path: Path):
+    shortlisted = brief(1)
+    parked = brief(2, protagonist=2, parked_reason="Revisit after the next release.")
+    hard_excluded = brief(3, protagonist=2)
+    store = SeenStore(tmp_path / "seen.json").load()
+
+    remember_screening_results(store, [shortlisted, parked, hard_excluded], date(2026, 8, 3))
+
+    assert store.contains(shortlisted.candidate, as_of=date(2027, 1, 1))
+    assert not store.contains(parked.candidate, as_of=date(2026, 9, 28))
+    assert store.contains(hard_excluded.candidate, as_of=date(2027, 1, 1))
+
+
+def test_v1_seen_store_migrates_to_permanent_memory(tmp_path: Path):
+    candidate = raw(1)
+    path = tmp_path / "seen.json"
+    path.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "fingerprints": {candidate.fingerprint: "2026-07-01"},
+                "identities": {},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    store = SeenStore(path).load()
+
+    assert store.contains(candidate, as_of=date(2027, 1, 1))
+    assert store.data["permanent"]["fingerprints"][candidate.fingerprint] == {
+        "seen_on": "2026-07-01"
+    }
+
+
+def test_empty_tracked_store_imports_legacy_cache_for_rollout(tmp_path: Path):
+    candidate = raw(1)
+    tracked_path = tmp_path / "rolodex" / "seen.json"
+    tracked = SeenStore(tracked_path)
+    tracked.save()
+    legacy_path = tmp_path / ".casting" / "seen.json"
+    legacy_path.parent.mkdir()
+    legacy_path.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "fingerprints": {candidate.fingerprint: "2026-07-01"},
+                "identities": {},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    store = load_seen_store(tracked_path, legacy_path)
+
+    assert not store.was_empty
+    assert store.path == tracked_path
+    assert store.contains(candidate, as_of=date(2027, 1, 1))
 
 
 def test_real_gates_are_used_without_an_average_threshold():
@@ -184,3 +275,29 @@ def test_rendered_report_passes_casting_eval_end_to_end():
     assert "### Shortlist\n" in report
     assert "### Parking lot\n" in report
     assert "### Shortlist check\n" in report
+
+
+def test_pipeline_warns_when_nonempty_run_starts_with_empty_seen_state(tmp_path: Path):
+    candidate = raw(1)
+
+    class Source:
+        name = "stub"
+
+        def fetch(self, since):
+            return SourceFetch(candidates=[candidate])
+
+    class Client:
+        def complete_json(self, system_prompt, user_prompt):
+            return mapping(1)
+
+    report, errors = run_pipeline(
+        run_date=date(2026, 8, 3),
+        seen_path=tmp_path / "seen.json",
+        output_path=tmp_path / "report.md",
+        llm_client=Client(),
+        source_connectors=[Source()],
+    )
+
+    assert errors == []
+    assert "WARNING: persisted seen state was empty before this run" in report
+    assert (tmp_path / "seen.json").exists()

@@ -84,7 +84,9 @@ python tools/weekly_scan.py \
   --run-date "$(date -u +%Y-%m-%d)"
 ```
 
-The local seen list is persisted at `.casting/seen.json`. The scheduled workflow caches that file between runs. [`.github/workflows/weekly-scan.yml`](.github/workflows/weekly-scan.yml) runs every Monday and can also be dispatched by hand. Configure `CASTING_LLM_API_KEY` as an Actions secret, plus `CASTING_LLM_API_URL` and `CASTING_LLM_MODEL` as repository variables. It opens a GitHub Issue only after a second, explicit evaluator pass succeeds.
+The durable seen list lives at [`rolodex/seen.json`](rolodex/seen.json) and is committed after each successful scheduled run, so resets are visible in git history. Shortlisted and hard-excluded candidates stay there permanently. Parking-lot candidates receive an eight-week cooldown and can return when their timing changes. The rollout imports the old Actions-cached `.casting/seen.json` once when available. If a non-empty run starts from an empty seen store, the report carries a loud warning for human review.
+
+[`.github/workflows/weekly-scan.yml`](.github/workflows/weekly-scan.yml) runs every Monday and can also be dispatched by hand. Configure `CASTING_LLM_API_KEY` as an Actions secret, plus `CASTING_LLM_API_URL` and `CASTING_LLM_MODEL` as repository variables. It opens a GitHub Issue only after a second, explicit evaluator pass succeeds, then commits the updated seen state to `main`. If delivery fails, memory is not advanced, so a transient Issue failure cannot silently discard the shortlist.
 
 ## Use it in your browser
 

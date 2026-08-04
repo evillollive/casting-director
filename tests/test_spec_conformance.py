@@ -36,6 +36,7 @@ REQUIRED_FILES = [
     "roadmap.md",
     "prompts/tier0-weekly-scan.md",
     "rolodex/do-not-resurface.md",
+    "rolodex/seen.json",
     "rolodex/taste-log.md",
     "tools/casting_eval.py",
 ]

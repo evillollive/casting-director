@@ -23,4 +23,3 @@ node_modules/
 
 # Playwright / local web test artifacts
 .playwright-mcp/
-.casting/
