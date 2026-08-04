@@ -17,6 +17,7 @@ def test_built_prompt_uses_canonical_markdown_and_injects_memory(tmp_path: Path)
                 "|---|---|---|---|---|",
                 "| _example: octocat_ | _example: demo_ | _passed_ | _2026-01-01_ | _example_ |",
                 "| Jane Builder | Visible Demo | surfaced | 2026-07-01 | already reviewed |",
+                "| maker_one | robot_camera | passed | 2026-07-02 | already reviewed |",
             ]
         ),
         encoding="utf-8",
@@ -39,6 +40,8 @@ def test_built_prompt_uses_canonical_markdown_and_injects_memory(tmp_path: Path)
     assert "CANONICAL-SENTINEL" in built
     assert "<!-- paste here -->" not in built
     assert "Jane Builder" in built
+    assert "maker_one" in built
+    assert "robot_camera" in built
     assert "example: octocat" not in built
     assert "- **Beat / theme focus right now:** physical builds" in built
     assert "- **Hard nos:** thin wrappers" in built

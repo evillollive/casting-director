@@ -48,15 +48,18 @@ class SeenStore:
 
 
 def identity_tokens(candidate: RawCandidate) -> set[str]:
-    return {
-        token
-        for token in (
-            normalize_dnr_name(candidate.name),
-            normalize_dnr_name(candidate.handle),
-            normalize_dnr_name(candidate.project),
-        )
-        if len(token) >= 3
-    }
+    name = normalize_dnr_name(candidate.name)
+    handle = normalize_dnr_name(candidate.handle)
+    project = normalize_dnr_name(candidate.project)
+    project_url = normalize_dnr_name(candidate.project_url)
+    tokens = set()
+    if len(handle) >= 3:
+        tokens.add(f"handle:{handle}")
+    if len(project_url) >= 3:
+        tokens.add(f"project-url:{project_url}")
+    if len(name) >= 3 and len(project) >= 3:
+        tokens.add(f"name-project:{name}|{project}")
+    return tokens
 
 
 def dedupe_candidates(

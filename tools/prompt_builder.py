@@ -31,7 +31,7 @@ def dnr_table(markdown: str) -> str:
         if len(cells) < 2:
             continue
         joined = " ".join(cells[:2]).lower()
-        if "example" in joined or "_" in joined:
+        if "example" in joined:
             continue
         kept.append(row)
     return "\n".join(kept)

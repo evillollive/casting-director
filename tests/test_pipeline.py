@@ -89,6 +89,20 @@ def test_dedupe_uses_canonical_normalization_and_persisted_seen_list(tmp_path: P
     assert [candidate.fingerprint for candidate in result.survivors] == ["test:3"]
 
 
+def test_dedupe_does_not_merge_unrelated_people_with_a_common_project_title(tmp_path: Path):
+    first = replace(raw(1), name="Alice", handle="alice", project="Calculator")
+    second = replace(raw(2), name="Bob", handle="bob", project="Calculator")
+
+    result = dedupe_candidates(
+        [first, second],
+        dnr_markdown="| Name / handle | Project |\n|---|---|\n",
+        seen_store=SeenStore(tmp_path / "seen.json"),
+    )
+
+    assert result.survivors == [first, second]
+    assert result.seen == []
+
+
 def test_real_gates_are_used_without_an_average_threshold():
     high_average_gate_failure = brief(
         1,
