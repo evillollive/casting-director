@@ -24,6 +24,12 @@ Once the rubric is stable, codify it. The repository now includes this GitHub-na
 
 The implementation is complete and tested, but the cron is intentionally disabled until the first live screening output is reviewed. Manual dispatch defaults to `dry_run: true`, which uploads the evaluated report without publishing an Issue or advancing memory. The gate to enabling the schedule is one reviewed dry run that passes `casting_eval.py` and reads like casting briefs rather than link slop.
 
+### Live verification gate
+
+Follow the [manual live-verification procedure](tests/README.md#5-live-verification-manual) before enabling the schedule. Dispatch [`.github/workflows/weekly-scan.yml`](.github/workflows/weekly-scan.yml) with `dry_run` left at `true`, download the uploaded `weekly-report.md`, and read the briefs. The repository needs the `CASTING_LLM_API_KEY` Actions secret plus the `CASTING_LLM_API_URL` and `CASTING_LLM_MODEL` variables. A dry run still sources, screens, renders, and evaluates the report, but it does not open an Issue or advance [`rolodex/seen.json`](rolodex/seen.json).
+
+Passing the evaluator is necessary but not sufficient. If the shortlist does not read like people worth a conversation, diagnose prompt assembly first, the screening call second, and the source mix third. The first dispatch is also the first hosted-runner test of the Reddit connector. Check the run log for `blocked from this runner IP`; if it appears, use the OAuth upgrade documented in [`sources.md`](sources.md). Update `sources.md` with the hosted-runner finding either way.
+
 ## Tier 2: small app with a real rolodex
 
 ### Build threshold and operating cost
