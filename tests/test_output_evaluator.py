@@ -203,6 +203,15 @@ def test_dnr_parser_skips_examples_and_headers():
     assert all("example" not in n for n in names)
 
 
+def test_dnr_parser_keeps_real_underscored_names_and_projects():
+    text = (
+        "| Name / handle | Project |\n"
+        "|---|---|\n"
+        "| maker_one | robot_camera |\n"
+    )
+    assert ce.parse_dnr_names(text) == ["maker_one", "robot_camera"]
+
+
 def test_entry_parser_counts_entries():
     text = (FIXTURES / "run_good.md").read_text(encoding="utf-8")
     entries = ce.parse_entries(text)

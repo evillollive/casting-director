@@ -276,7 +276,7 @@ def parse_dnr_names(dnr_text: str) -> list[str]:
         if first in ("name / handle", "name/handle", "") or set(first) <= {"-", ":"}:
             continue
         joined = " ".join(cells[:2]).lower()
-        if "example" in joined or "_" in joined:
+        if "example" in joined:
             continue
         for c in cells[:2]:
             c = c.strip().strip("_*")

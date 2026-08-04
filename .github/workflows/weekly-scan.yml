@@ -1,0 +1,105 @@
+name: Weekly casting scan
+
+on:
+  # Disabled because Stage 2 live screening has never run; prompt assembly and
+  # brief quality are verified only by stubs. Re-enable these two lines after
+  # one reviewed manual dry run produces casting briefs rather than link slop.
+  # schedule:
+  #   - cron: "17 15 * * 1"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Build and evaluate the report without publishing or advancing memory
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: weekly-casting-scan
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: main
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Restore legacy seen state for migration
+        uses: actions/cache/restore@v5
+        with:
+          path: .casting/seen.json
+          key: casting-seen-migration
+          restore-keys: |
+            casting-seen-
+
+      - name: Set run date
+        id: run
+        run: echo "date=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+
+      - name: Run scheduled scan
+        env:
+          CASTING_LLM_API_KEY: ${{ secrets.CASTING_LLM_API_KEY }}
+          CASTING_LLM_API_URL: ${{ vars.CASTING_LLM_API_URL }}
+          CASTING_LLM_MODEL: ${{ vars.CASTING_LLM_MODEL }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python tools/weekly_scan.py \
+            --output weekly-report.md \
+            --run-date "${{ steps.run.outputs.date }}"
+
+      - name: Enforce report gate
+        run: |
+          python tools/casting_eval.py weekly-report.md \
+            --dnr rolodex/do-not-resurface.md \
+            --asof "${{ steps.run.outputs.date }}"
+
+      - name: Upload dry-run report
+        if: ${{ inputs.dry_run == true }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: casting-report-${{ steps.run.outputs.date }}
+          path: weekly-report.md
+          if-no-files-found: error
+
+      - name: Open report issue
+        if: ${{ inputs.dry_run == false }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_DATE: ${{ steps.run.outputs.date }}
+        run: gh issue create --title "Weekly casting scan - ${RUN_DATE}" --body-file weekly-report.md
+
+      - name: Persist seen state
+        if: ${{ inputs.dry_run == false }}
+        env:
+          RUN_DATE: ${{ steps.run.outputs.date }}
+        run: |
+          if git diff --quiet -- rolodex/seen.json; then
+            echo "Seen state is unchanged."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add rolodex/seen.json
+          git commit -m "chore: update seen state for ${RUN_DATE} [skip ci]"
+          for attempt in 1 2 3; do
+            git fetch origin main
+            git rebase origin/main
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+            echo "Push raced with another main update; retrying (${attempt}/3)."
+          done
+          echo "Could not persist seen state after three attempts." >&2
+          exit 1
