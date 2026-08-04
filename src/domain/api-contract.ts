@@ -81,7 +81,22 @@ export const candidateBulkPatchSchema = candidatePatchFields
 export const createScanSchema = z.object({
   runDate: z.iso.date(),
   sourceKeys: z.array(z.string().min(1)).min(1).max(100),
-});
+}).refine(
+  ({ sourceKeys }) => new Set(sourceKeys).size === sourceKeys.length,
+  { path: ["sourceKeys"], message: "sourceKeys must not contain duplicates." },
+);
+
+export const scanQuerySchema = paginationSchema.extend({
+  status: z
+    .enum(["PENDING", "RUNNING", "COMPLETED", "FAILED"])
+    .optional(),
+  from: z.iso.date().optional(),
+  to: z.iso.date().optional(),
+  summary: z.string().trim().min(1).max(200).optional(),
+}).refine(
+  ({ from, to }) => !from || !to || from <= to,
+  { path: ["to"], message: "to must be on or after from." },
+);
 
 export const tuningUpdateSchema = z.object({
   version: z.number().int().positive(),

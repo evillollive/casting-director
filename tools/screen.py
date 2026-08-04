@@ -268,8 +268,15 @@ def screen_candidates(
     *,
     run_prompt: str,
     client: LlmClient,
+    on_screened=None,
 ) -> list[CastingBrief]:
-    return [
-        brief_from_mapping(candidate, client.complete_json(run_prompt, candidate_prompt(candidate)))
-        for candidate in candidates
-    ]
+    briefs = []
+    for candidate in candidates:
+        brief = brief_from_mapping(
+            candidate,
+            client.complete_json(run_prompt, candidate_prompt(candidate)),
+        )
+        briefs.append(brief)
+        if on_screened:
+            on_screened(brief, len(briefs), len(candidates))
+    return briefs

@@ -3,6 +3,7 @@ import {
   candidatePatchSchema,
   candidateQuerySchema,
   createScanSchema,
+  scanQuerySchema,
 } from "@/domain/api-contract";
 
 describe("write API contracts", () => {
@@ -43,5 +44,20 @@ describe("write API contracts", () => {
       gatePassed: false,
       doNotResurface: true,
     });
+  });
+
+  it("validates scan history ranges and unique source keys", () => {
+    expect(
+      createScanSchema.safeParse({
+        runDate: "2026-08-04",
+        sourceKeys: ["github", "github"],
+      }).success,
+    ).toBe(false);
+    expect(
+      scanQuerySchema.safeParse({
+        from: "2026-08-05",
+        to: "2026-08-04",
+      }).success,
+    ).toBe(false);
   });
 });

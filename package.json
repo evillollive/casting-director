@@ -16,7 +16,8 @@
     "test:python": "pytest tests/ -q",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
-    "db:import-memory": "tsx scripts/import-memory.ts"
+    "db:import-memory": "tsx scripts/import-memory.ts",
+    "worker": "tsx src/worker/cli.ts"
   },
   "dependencies": {
     "@prisma/client": "6.19.1",

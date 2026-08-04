@@ -122,14 +122,13 @@ python3 -m http.server 8000
 
 The app fetches the real prompt, rubric, and sources from `web/content/`, which is a byte-for-byte mirror of the canonical files. Regenerate it with `python tools/sync_web_content.py` after editing any of them; a test fails if the copies drift.
 
-## Run the Tier 2 foundation
+## Run Tier 2
 
-Tier 2 layer 1 adds a server-rendered Next.js and TypeScript application while
-keeping `web/` and the Python engine unchanged. It includes the internal-team
-workspace shell, a provider-neutral session adapter boundary, validated runtime
-configuration, typed API inputs, Postgres persistence, and a one-way bootstrap
-import for existing markdown memory. It does not include the background scan
-worker or duplicate the canonical editorial logic.
+Tier 2 layers 1 and 2 add a server-rendered Next.js application, authenticated
+scan APIs, Postgres persistence, and a separately run durable worker while
+keeping `web/` and the Python engine authoritative. The worker calls the
+canonical Python sourcing, prompt, screening, rendering, and evaluator modules;
+it does not duplicate the rubric in TypeScript.
 
 Requirements are Node.js 20.9 or newer and PostgreSQL. Configure the variables
 in [`.env.example`](.env.example), then run:
@@ -138,12 +137,17 @@ in [`.env.example`](.env.example), then run:
 npm ci
 npm run db:migrate
 npm run dev
+# in a second process
+npm run worker
 ```
 
-The health endpoint at `/api/health` reports database and authentication
-readiness without returning secret values. The application is deployment
-provider neutral: use any Node.js runtime and PostgreSQL service that preserve
-durable jobs and backups.
+The health endpoint at `/api/health` reports database readiness, fresh workers,
+queued jobs, and expired leases without returning secret values. Run
+`npm run worker -- --healthcheck` for worker readiness or
+`npm run worker -- --once` to process at most one job. The application is
+deployment provider neutral: use any Node.js runtime and PostgreSQL service
+that preserve durable jobs and backups. See
+[`docs/tier2-scan-engine.md`](docs/tier2-scan-engine.md).
 
 Prisma models durable users and workspace membership, authentication identities
 and sessions, candidate identity and merge provenance, normalized tags,

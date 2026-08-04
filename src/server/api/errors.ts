@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ApiErrorBody } from "@/domain/api-contract";
+import { AuthenticationRequiredError } from "@/server/auth/adapter";
 
 export function validationErrorResponse(error: z.ZodError): Response {
   const fields: Record<string, string[]> = {};
@@ -26,4 +27,34 @@ export function conflictResponse(message: string): Response {
     },
   };
   return Response.json(body, { status: 409 });
+}
+
+export function apiErrorResponse(
+  code: string,
+  message: string,
+  status: number,
+  fields?: Record<string, string[]>,
+): Response {
+  const body: ApiErrorBody = { error: { code, message, fields } };
+  return Response.json(body, { status });
+}
+
+export function authenticationErrorResponse(): Response {
+  return apiErrorResponse(
+    "AUTHENTICATION_REQUIRED",
+    "Authenticated team access is required.",
+    401,
+  );
+}
+
+export function routeErrorResponse(error: unknown): Response {
+  if (error instanceof AuthenticationRequiredError) {
+    return authenticationErrorResponse();
+  }
+  console.error("API request failed.", error);
+  return apiErrorResponse(
+    "INTERNAL_ERROR",
+    "The request could not be completed.",
+    500,
+  );
 }

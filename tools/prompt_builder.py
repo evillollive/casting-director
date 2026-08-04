@@ -72,10 +72,26 @@ def build_prompt(
     tuning: dict | None = None,
 ) -> str:
     template = prompt_path.read_text(encoding="utf-8")
-    table = dnr_table(dnr_path.read_text(encoding="utf-8"))
+    return build_prompt_from_text(
+        template=template,
+        dnr_markdown=dnr_path.read_text(encoding="utf-8"),
+        taste_markdown=taste_path.read_text(encoding="utf-8"),
+        tuning=tuning,
+    )
+
+
+def build_prompt_from_text(
+    *,
+    template: str,
+    dnr_markdown: str,
+    taste_markdown: str,
+    tuning: dict | None = None,
+) -> str:
+    """Build the canonical prompt from immutable database-backed snapshots."""
+    table = dnr_table(dnr_markdown)
     out = template.replace("<!-- paste here -->", table, 1)
     out = inject_tuning(out, tuning)
-    return inject_taste_log(out, taste_path.read_text(encoding="utf-8"))
+    return inject_taste_log(out, taste_markdown)
 
 
 def tuning_from_environment() -> dict:

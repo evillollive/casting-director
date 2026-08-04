@@ -34,16 +34,15 @@ Passing the evaluator is necessary but not sufficient. If the shortlist does not
 
 ### Implementation status
 
-Layer 1 is implemented as a self-contained application and persistence
-foundation. It adds a provider-neutral Next.js workspace, an authentication
-adapter boundary and team data primitives, typed API validation, a comprehensive
-Prisma/Postgres model and migration, immutable editorial history, and a
-bootstrap importer for the existing markdown memory.
+Layers 1 and 2 are implemented. The application foundation now includes a
+provider-neutral durable scan job/lease engine, a separately run worker,
+authenticated workspace-scoped scan APIs, exact execution snapshots, and a
+machine-readable boundary around the canonical Python Tier 1 engine.
 
 The static `web/` app and Python Tier 0/Tier 1 engine remain authoritative and
-available. The background worker, authenticated write routes, live database
-pages, repository-backed two-way sync, backups, and deployment topology remain
-follow-on layers. Those layers must call the existing Python prompt builder and
+available. Live database pages, candidate/tuning/taste write routes,
+repository-backed two-way sync, backups, and deployment topology remain
+follow-on layers. The scan worker calls the existing Python prompt builder and
 evaluator rather than translating their rules into TypeScript.
 
 ### Build threshold and operating cost

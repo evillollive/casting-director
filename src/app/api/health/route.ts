@@ -55,10 +55,31 @@ export async function GET() {
     );
   }
 
+  const freshnessWindow = new Date(
+    Date.now() -
+      Math.max(
+        30_000,
+        Number(process.env.CASTING_WORKER_LEASE_SECONDS ?? "120") * 2_000,
+      ),
+  );
+  const [readyWorkers, pendingJobs, expiredLeases] = await Promise.all([
+    prisma.workerProcess.count({
+      where: { status: "READY", lastHeartbeat: { gte: freshnessWindow } },
+    }),
+    prisma.scanJob.count({ where: { status: "READY" } }),
+    prisma.scanJob.count({
+      where: { status: "RUNNING", leaseExpiresAt: { lte: new Date() } },
+    }),
+  ]);
   return Response.json({
     service: "casting-director-tier-2",
     ready: true,
-    checks: { configuration: true, database: true },
+    checks: {
+      configuration: true,
+      database: true,
+      worker: readyWorkers > 0,
+    },
+    worker: { readyProcesses: readyWorkers, pendingJobs, expiredLeases },
     canonicalEditorialArtifacts: CANONICAL_EDITORIAL_ARTIFACTS,
   });
 }

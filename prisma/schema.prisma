@@ -54,6 +54,19 @@ enum ScanSourceStatus {
   FAILED
 }
 
+enum ScanJobStatus {
+  READY
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+enum WorkerProcessStatus {
+  STARTING
+  READY
+  DRAINING
+}
+
 enum ScanCandidatePlacement {
   SHORTLIST
   PARKING_LOT
@@ -177,6 +190,7 @@ model Source {
   displayName String
   family      SourceFamily
   active      Boolean               @default(true)
+  executable  Boolean               @default(false)
   createdAt   DateTime              @default(now())
   updatedAt   DateTime              @updatedAt
   version     Int                   @default(1)
@@ -342,42 +356,84 @@ model CandidateStatusChange {
 }
 
 model Scan {
-  id                   String                @id @default(cuid())
-  workspaceId          String
-  status               ScanStatus            @default(PENDING)
-  triggeredById        String
-  tuningRevisionId     String?
-  startedAt            DateTime?
-  completedAt          DateTime?
-  candidatesFetched    Int                   @default(0)
-  candidatesDeduped    Int                   @default(0)
-  candidatesScreened   Int                   @default(0)
-  shortlistCount       Int                   @default(0)
-  parkingCount         Int                   @default(0)
-  summary              String?
-  reportMarkdown       String?
-  error                String?
-  runDate              DateTime              @db.Date
-  evalPassed           Boolean?
-  promptHash           String
-  configSnapshot       Json
-  tuningSnapshot       Json
-  tasteLogSnapshot     Json
-  createdAt            DateTime              @default(now())
-  updatedAt            DateTime              @updatedAt
-  version              Int                   @default(1)
-  workspace            Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  triggeredBy          User                  @relation(fields: [triggeredById], references: [id], onDelete: Restrict)
-  tuningRevision       TuningConfigRevision? @relation(fields: [tuningRevisionId], references: [id], onDelete: Restrict)
-  sources              ScanSource[]
-  candidates           ScanCandidate[]
-  evaluatorViolations  EvaluatorViolation[]
-  firstSeenCandidates  Candidate[]           @relation("CandidateFirstScan")
-  latestSeenCandidates Candidate[]           @relation("CandidateLatestScan")
+  id                     String                @id @default(cuid())
+  workspaceId            String
+  status                 ScanStatus            @default(PENDING)
+  triggeredById          String
+  tuningRevisionId       String?
+  startedAt              DateTime?
+  completedAt            DateTime?
+  candidatesFetched      Int                   @default(0)
+  candidatesDeduped      Int                   @default(0)
+  candidatesScreened     Int                   @default(0)
+  shortlistCount         Int                   @default(0)
+  parkingCount           Int                   @default(0)
+  summary                String?
+  reportMarkdown         String?
+  error                  String?
+  runDate                DateTime              @db.Date
+  evalPassed             Boolean?
+  promptHash             String
+  promptSnapshot         Json?
+  configHash             String?
+  configSnapshot         Json
+  tuningHash             String?
+  tuningSnapshot         Json
+  tasteLogHash           String?
+  tasteLogSnapshot       Json
+  memoryHash             String?
+  memorySnapshot         Json?
+  doNotResurfaceHash     String?
+  doNotResurfaceSnapshot Json?
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
+  version                Int                   @default(1)
+  workspace              Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  triggeredBy            User                  @relation(fields: [triggeredById], references: [id], onDelete: Restrict)
+  tuningRevision         TuningConfigRevision? @relation(fields: [tuningRevisionId], references: [id], onDelete: Restrict)
+  sources                ScanSource[]
+  candidates             ScanCandidate[]
+  evaluatorViolations    EvaluatorViolation[]
+  job                    ScanJob?
+  firstSeenCandidates    Candidate[]           @relation("CandidateFirstScan")
+  latestSeenCandidates   Candidate[]           @relation("CandidateLatestScan")
 
   @@index([workspaceId, status, createdAt])
   @@index([workspaceId, runDate])
   @@map("scans")
+}
+
+model ScanJob {
+  id             String        @id @default(cuid())
+  scanId         String        @unique
+  status         ScanJobStatus @default(READY)
+  attempt        Int           @default(0)
+  maxAttempts    Int           @default(3)
+  availableAt    DateTime      @default(now())
+  leaseOwner     String?
+  leaseToken     String?
+  leaseExpiresAt DateTime?
+  heartbeatAt    DateTime?
+  lastError      String?
+  failureCode    String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  version        Int           @default(1)
+  scan           Scan          @relation(fields: [scanId], references: [id], onDelete: Cascade)
+
+  @@index([status, availableAt, leaseExpiresAt])
+  @@map("scan_jobs")
+}
+
+model WorkerProcess {
+  id            String              @id
+  status        WorkerProcessStatus @default(STARTING)
+  startedAt     DateTime            @default(now())
+  lastHeartbeat DateTime            @default(now())
+  metadata      Json?
+
+  @@index([status, lastHeartbeat])
+  @@map("worker_processes")
 }
 
 model ScanSource {

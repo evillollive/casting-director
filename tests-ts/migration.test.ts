@@ -6,6 +6,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 const migrationPath = resolve(
   "prisma/migrations/20260804190000_tier_2_foundation/migration.sql",
 );
+const scanJobsMigrationPath = resolve(
+  "prisma/migrations/20260804203000_tier_2_scan_jobs/migration.sql",
+);
 
 let database: PGlite;
 
@@ -14,10 +17,15 @@ function scanInsert(id: string, status: "PENDING" | "RUNNING"): string {
     INSERT INTO "scans" (
       "id", "workspaceId", "status", "triggeredById", "runDate",
       "promptHash", "configSnapshot", "tuningSnapshot", "tasteLogSnapshot",
-      "updatedAt"
+      "promptSnapshot", "configHash", "tuningHash", "tasteLogHash",
+      "memoryHash", "memorySnapshot", "doNotResurfaceHash",
+      "doNotResurfaceSnapshot", "updatedAt"
     ) VALUES (
       '${id}', 'workspace-1', '${status}', 'user-1', DATE '2026-08-04',
-      'prompt-hash', '{}'::jsonb, '{}'::jsonb, '[]'::jsonb, CURRENT_TIMESTAMP
+      'prompt-hash', '{}'::jsonb, '{}'::jsonb, '[]'::jsonb,
+      '{"canonicalPrompt":"prompt"}'::jsonb, 'config-hash', 'tuning-hash',
+      'taste-hash', 'memory-hash', '[]'::jsonb, 'dnr-hash', '[]'::jsonb,
+      CURRENT_TIMESTAMP
     )
   `;
 }
@@ -26,6 +34,7 @@ describe.sequential("PostgreSQL migration", () => {
   beforeAll(async () => {
     database = new PGlite();
     await database.exec(await readFile(migrationPath, "utf8"));
+    await database.exec(await readFile(scanJobsMigrationPath, "utf8"));
     await database.exec(`
       INSERT INTO "users" (
         "id", "email", "displayName", "updatedAt"
@@ -50,7 +59,7 @@ describe.sequential("PostgreSQL migration", () => {
       FROM information_schema.tables
       WHERE table_schema = 'public'
     `);
-    expect(result.rows[0]?.count).toBeGreaterThanOrEqual(24);
+    expect(result.rows[0]?.count).toBeGreaterThanOrEqual(26);
   });
 
   it("enforces one active scan in a workspace", async () => {
@@ -245,5 +254,180 @@ describe.sequential("PostgreSQL migration", () => {
     expect(migration).toContain(
       'WHERE "id" = new_scan_id\n            FOR UPDATE',
     );
+  });
+
+  it("seeds the canonical provider-neutral source catalog", async () => {
+    const result = await database.query<{ key: string }>(
+      `SELECT "key" FROM "sources" ORDER BY "key"`,
+    );
+    expect(result.rows.map((row) => row.key)).toEqual([
+      "github",
+      "hackaday",
+      "hacker-news",
+      "itch.io",
+      "reddit",
+    ]);
+  });
+
+  it("enforces consistent leases and immutable terminal jobs", async () => {
+    await database.exec(scanInsert("scan-job", "PENDING"));
+    await database.exec(`
+      INSERT INTO "scan_jobs" (
+        "id", "scanId", "updatedAt"
+      ) VALUES (
+        'job-1', 'scan-job', CURRENT_TIMESTAMP
+      )
+    `);
+    await expect(
+      database.exec(`
+        UPDATE "scan_jobs"
+        SET "status" = 'RUNNING',
+            "leaseOwner" = 'worker-1',
+            "leaseToken" = NULL,
+            "leaseExpiresAt" = CURRENT_TIMESTAMP + INTERVAL '1 minute',
+            "heartbeatAt" = CURRENT_TIMESTAMP,
+            "attempt" = 1,
+            "updatedAt" = CURRENT_TIMESTAMP
+        WHERE "id" = 'job-1'
+      `),
+    ).rejects.toThrow();
+    await database.exec(`
+      UPDATE "scan_jobs"
+      SET "status" = 'RUNNING',
+          "leaseOwner" = 'worker-1',
+          "leaseToken" = 'lease-1',
+          "leaseExpiresAt" = CURRENT_TIMESTAMP + INTERVAL '1 minute',
+          "heartbeatAt" = CURRENT_TIMESTAMP,
+          "attempt" = 1,
+          "updatedAt" = CURRENT_TIMESTAMP
+      WHERE "id" = 'job-1';
+      UPDATE "scan_jobs"
+      SET "status" = 'FAILED',
+          "leaseOwner" = NULL,
+          "leaseToken" = NULL,
+          "leaseExpiresAt" = NULL,
+          "updatedAt" = CURRENT_TIMESTAMP
+      WHERE "id" = 'job-1';
+    `);
+    await expect(
+      database.exec(`
+        UPDATE "scan_jobs"
+        SET "lastError" = 'rewritten'
+        WHERE "id" = 'job-1'
+      `),
+    ).rejects.toThrow("terminal scan jobs are immutable");
+    await database.exec(`
+      UPDATE "scans"
+      SET "status" = 'FAILED', "updatedAt" = CURRENT_TIMESTAMP
+      WHERE "id" = 'scan-job'
+    `);
+  });
+
+  it("reclaims expired leases without accepting a stale lease token", async () => {
+    await database.exec(scanInsert("scan-recovery", "PENDING"));
+    await database.exec(`
+      INSERT INTO "scan_jobs" (
+        "id", "scanId", "updatedAt"
+      ) VALUES (
+        'job-recovery', 'scan-recovery', CURRENT_TIMESTAMP
+      );
+      UPDATE "scan_jobs"
+      SET "status" = 'RUNNING',
+          "attempt" = 1,
+          "leaseOwner" = 'worker-old',
+          "leaseToken" = 'lease-old',
+          "leaseExpiresAt" = CURRENT_TIMESTAMP - INTERVAL '1 minute',
+          "heartbeatAt" = CURRENT_TIMESTAMP - INTERVAL '2 minutes',
+          "updatedAt" = CURRENT_TIMESTAMP
+      WHERE "id" = 'job-recovery';
+    `);
+    const reclaimed = await database.query<{
+      attempt: number;
+      leaseToken: string;
+    }>(`
+      WITH candidate AS (
+        SELECT "id"
+        FROM "scan_jobs"
+        WHERE "status" = 'RUNNING'
+          AND "leaseExpiresAt" <= CURRENT_TIMESTAMP
+          AND "attempt" < "maxAttempts"
+        FOR UPDATE SKIP LOCKED
+      )
+      UPDATE "scan_jobs" job
+      SET "attempt" = job."attempt" + 1,
+          "leaseOwner" = 'worker-new',
+          "leaseToken" = 'lease-new',
+          "leaseExpiresAt" = CURRENT_TIMESTAMP + INTERVAL '1 minute',
+          "heartbeatAt" = CURRENT_TIMESTAMP,
+          "updatedAt" = CURRENT_TIMESTAMP
+      FROM candidate
+      WHERE job."id" = candidate."id"
+      RETURNING job."attempt", job."leaseToken"
+    `);
+    expect(reclaimed.rows).toEqual([
+      { attempt: 2, leaseToken: "lease-new" },
+    ]);
+
+    const staleWrite = await database.query(`
+      UPDATE "scan_jobs"
+      SET "heartbeatAt" = CURRENT_TIMESTAMP
+      WHERE "id" = 'job-recovery'
+        AND "leaseToken" = 'lease-old'
+      RETURNING "id"
+    `);
+    expect(staleWrite.rows).toHaveLength(0);
+  });
+
+  it("upgrades legacy completed scans and enqueues legacy active scans", async () => {
+    const legacy = new PGlite();
+    try {
+      await legacy.exec(await readFile(migrationPath, "utf8"));
+      await legacy.exec(`
+        INSERT INTO "users" (
+          "id", "email", "displayName", "updatedAt"
+        ) VALUES (
+          'legacy-user', 'legacy@example.com', 'Legacy', CURRENT_TIMESTAMP
+        );
+        INSERT INTO "workspaces" (
+          "id", "slug", "name", "updatedAt"
+        ) VALUES (
+          'legacy-workspace', 'legacy', 'Legacy', CURRENT_TIMESTAMP
+        );
+        INSERT INTO "scans" (
+          "id", "workspaceId", "status", "triggeredById", "runDate",
+          "evalPassed", "promptHash", "configSnapshot", "tuningSnapshot",
+          "tasteLogSnapshot", "updatedAt"
+        ) VALUES (
+          'legacy-completed', 'legacy-workspace', 'COMPLETED', 'legacy-user',
+          DATE '2026-08-01', true, 'legacy-prompt', '{}'::jsonb,
+          '{}'::jsonb, '[]'::jsonb, CURRENT_TIMESTAMP
+        ), (
+          'legacy-active', 'legacy-workspace', 'RUNNING', 'legacy-user',
+          DATE '2026-08-04', NULL, 'legacy-prompt', '{}'::jsonb,
+          '{}'::jsonb, '[]'::jsonb, CURRENT_TIMESTAMP
+        );
+      `);
+
+      await legacy.exec(await readFile(scanJobsMigrationPath, "utf8"));
+      const completed = await legacy.query<{
+        promptSnapshot: { legacy: boolean };
+      }>(`
+        SELECT "promptSnapshot"
+        FROM "scans"
+        WHERE "id" = 'legacy-completed'
+      `);
+      const jobs = await legacy.query<{ scanId: string; status: string }>(`
+        SELECT "scanId", "status"
+        FROM "scan_jobs"
+        WHERE "scanId" = 'legacy-active'
+      `);
+
+      expect(completed.rows[0]?.promptSnapshot).toEqual({ legacy: true });
+      expect(jobs.rows).toEqual([
+        { scanId: "legacy-active", status: "READY" },
+      ]);
+    } finally {
+      await legacy.close();
+    }
   });
 });
