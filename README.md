@@ -124,12 +124,13 @@ The app fetches the real prompt, rubric, and sources from `web/content/`, which 
 
 ## Run Tier 2
 
-Tier 2 layers 1 through 3 add a server-rendered Next.js application,
+Tier 2 layers 1 through 4 add a server-rendered Next.js application,
 authenticated product APIs, Postgres persistence, and a separately run durable
-worker while keeping `web/` and the Python engine authoritative. The worker and
-tuning preview call the canonical Python sourcing, prompt, screening,
-rendering, and evaluator modules; they do not duplicate the rubric in
-TypeScript.
+worker, conflict-aware repository interoperability, operational recovery, and
+vendor-neutral runtime packaging while keeping `web/` and the Python engine
+authoritative. The worker and tuning preview call the canonical Python sourcing,
+prompt, screening, rendering, evaluator, and identity normalization modules;
+they do not duplicate the rubric in TypeScript.
 
 Requirements are Node.js 20.9 or newer and PostgreSQL. Configure the variables
 in [`.env.example`](.env.example), then run:
@@ -156,7 +157,8 @@ queued jobs, and expired leases without returning secret values. Run
 `npm run worker -- --once` to process at most one job. The application is
 deployment provider neutral: use any Node.js runtime and PostgreSQL service
 that preserve durable jobs and backups. See
-[`docs/tier2-scan-engine.md`](docs/tier2-scan-engine.md).
+[`docs/tier2-scan-engine.md`](docs/tier2-scan-engine.md) and
+[`docs/tier2-operations.md`](docs/tier2-operations.md).
 
 Authenticated pages are available at `/` (Shortlist), `/scans/live`,
 `/scans`, `/rolodex`, `/tuning`, and `/taste-log`. The product APIs cover
@@ -186,9 +188,24 @@ npm run db:import-memory -- --write --actor editor@example.com
 ```
 
 The actor is required when taste-log rows exist so authorship is preserved.
-This command is the bootstrap path only. Conflict-aware two-way repository sync
-belongs to layer 4, together with backups and deployment topology. Interface
-adaptation provenance is recorded in
+This command is the bootstrap path only. Ongoing changes use authenticated
+`POST /api/rolodex/sync`, signed webhook/scheduled ingestion, durable export
+jobs, `GET /api/rolodex/sync` operational status, and explicit conflict
+resolution on `/rolodex`. A markdown DNR deletion never clears Postgres
+automatically.
+
+Build the provider-neutral production image and inspect the example topology:
+
+```bash
+docker build -t casting-director:local .
+docker compose -f docker-compose.production.yml config
+```
+
+Backup and restore default to preview/inspection and require deliberate flags
+for writes. Full environment, migration, health, recovery, local/git, and
+GitHub REST integration contracts are in
+[`docs/tier2-operations.md`](docs/tier2-operations.md). Interface adaptation
+provenance is recorded in
 [`docs/tier2-provenance.md`](docs/tier2-provenance.md).
 
 ## The build path, in one breath
@@ -205,10 +222,13 @@ Run the canonical Python suite with `pip install -r requirements-dev.txt` then
 `pytest tests/ -q`. It covers spec conformance, the output evaluator, source
 connectors, the Tier 1 pipeline, and parity with the static browser evaluator.
 
-For Tier 2, run `npm ci`, `npm test`, `npm run lint`, and `npm run build`. The
+For Tier 2, run `npm ci`, `npm test`, `npm run typecheck`, `npm run lint`, and
+`npm run build`. The
 TypeScript suite covers configuration errors, API optimistic concurrency,
-markdown parsing, shortlist gate semantics, scan completion rules, and database
-invariants. You can still run the evaluator directly with
+markdown parsing and reconciliation, sync conflict safety, webhook verification,
+shortlist gate semantics, scan completion rules, and database invariants. Run
+`pytest tests/ -q` for Python, backup/restore, and packaging checks. You can
+still run the evaluator directly with
 `python tools/casting_eval.py run.md --dnr rolodex/do-not-resurface.md`.
 
 ## Deploy

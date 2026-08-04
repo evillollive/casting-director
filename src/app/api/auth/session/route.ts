@@ -5,6 +5,7 @@ import {
   routeErrorResponse,
   validationErrorResponse,
 } from "@/server/api/errors";
+import { jsonBodyErrorResponse, readApiJson } from "@/server/api/body";
 
 const signInSchema = z.object({ token: z.string().trim().min(32).max(512) });
 
@@ -12,9 +13,9 @@ export async function POST(request: Request) {
   try {
     let body: unknown;
     try {
-      body = await request.json();
-    } catch {
-      return apiErrorResponse("INVALID_JSON", "The request body must be valid JSON.", 400);
+      body = await readApiJson(request);
+    } catch (error) {
+      return jsonBodyErrorResponse(error);
     }
     const parsed = signInSchema.safeParse(body);
     if (!parsed.success) return validationErrorResponse(parsed.error);

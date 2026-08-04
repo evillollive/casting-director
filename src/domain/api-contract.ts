@@ -140,6 +140,28 @@ export const tasteLogPatchSchema = z.object({
   note: z.string().trim().min(1).max(10_000),
 });
 
+export const markdownDocumentSchema = z.enum([
+  "DO_NOT_RESURFACE",
+  "TASTE_LOG",
+]);
+
+export const rolodexSyncSchema = z.object({
+  action: z.enum(["RECONCILE", "IMPORT", "EXPORT"]).default("RECONCILE"),
+  documents: z
+    .array(markdownDocumentSchema)
+    .min(1)
+    .max(2)
+    .default(["DO_NOT_RESURFACE", "TASTE_LOG"]),
+}).refine(
+  ({ documents }) => new Set(documents).size === documents.length,
+  { path: ["documents"], message: "documents must not contain duplicates." },
+);
+
+export const syncConflictResolutionSchema = z.object({
+  resolution: z.enum(["DATABASE", "MARKDOWN"]),
+  version: z.number().int().positive(),
+});
+
 export type ApiErrorBody = {
   error: {
     code: string;

@@ -51,6 +51,7 @@ describe("taste-log service", () => {
       tasteLogEntry: {
         create: vi.fn().mockResolvedValue({ id: "taste-1", version: 1 }),
       },
+      repositorySyncJob: { createMany: vi.fn() },
     };
     await createTasteLogEntry(transactionDatabase(tx), principal, {
       weekOf: "2026-08-03",
@@ -87,6 +88,7 @@ describe("taste-log service", () => {
         }),
       },
       tasteLogEntryRevision: { create: vi.fn() },
+      repositorySyncJob: { createMany: vi.fn() },
     };
     await updateTasteLogEntry(
       transactionDatabase(tx),

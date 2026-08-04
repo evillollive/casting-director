@@ -15,6 +15,16 @@ import {
   executeScanJob,
   ScanExecutionError,
 } from "@/worker/executor";
+import {
+  claimNextRepositorySyncJob,
+  completeRepositorySyncJob,
+  retryOrFailRepositorySyncJob,
+} from "@/server/sync/jobs";
+import {
+  executeRepositorySyncJob,
+  RepositorySyncExecutionError,
+} from "@/server/sync/worker";
+import { redactLogText } from "@/server/logging";
 
 const once = process.argv.includes("--once");
 const healthcheck = process.argv.includes("--healthcheck");
@@ -28,7 +38,7 @@ function log(level: "info" | "error", message: string, details = {}) {
     timestamp: new Date().toISOString(),
     level,
     workerId,
-    message,
+    message: redactLogText(message),
     ...details,
   });
   (level === "error" ? console.error : console.log)(output);
@@ -116,6 +126,66 @@ async function run() {
       leaseMs: config.CASTING_WORKER_LEASE_SECONDS * 1_000,
     });
     if (!job) {
+      const repositoryJob = await claimNextRepositorySyncJob(prisma, {
+        workerId,
+        leaseMs: config.CASTING_WORKER_LEASE_SECONDS * 1_000,
+      });
+      if (repositoryJob) {
+        log("info", "Claimed repository sync job.", {
+          repositorySyncJobId: repositoryJob.id,
+          document: repositoryJob.document,
+          direction: repositoryJob.direction,
+          attempt: repositoryJob.attempt,
+        });
+        try {
+          const revision = await executeRepositorySyncJob(
+            prisma,
+            config,
+            repositoryJob,
+          );
+          await completeRepositorySyncJob(prisma, repositoryJob, revision);
+          log("info", "Finished repository sync job.", {
+            repositorySyncJobId: repositoryJob.id,
+            document: repositoryJob.document,
+          });
+        } catch (error) {
+          const failure =
+            error instanceof RepositorySyncExecutionError
+              ? error
+              : new RepositorySyncExecutionError(
+                  "REPOSITORY_SYNC_ERROR",
+                  error instanceof Error ? error.message : String(error),
+                  true,
+                );
+          try {
+            const outcome = await retryOrFailRepositorySyncJob(
+              prisma,
+              repositoryJob,
+              failure,
+            );
+            log("error", failure.message, {
+              repositorySyncJobId: repositoryJob.id,
+              document: repositoryJob.document,
+              code: failure.code,
+              outcome,
+            });
+          } catch (persistenceError) {
+            log(
+              "error",
+              persistenceError instanceof Error
+                ? persistenceError.message
+                : String(persistenceError),
+              {
+                repositorySyncJobId: repositoryJob.id,
+                document: repositoryJob.document,
+                code: "SYNC_FAILURE_PERSISTENCE_ERROR",
+              },
+            );
+          }
+        }
+        if (once) break;
+        continue;
+      }
       if (once) break;
       await sleep(config.CASTING_WORKER_POLL_MS);
       continue;

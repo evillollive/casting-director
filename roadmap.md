@@ -34,17 +34,18 @@ Passing the evaluator is necessary but not sufficient. If the shortlist does not
 
 ### Implementation status
 
-Layers 1 through 3 are implemented. The application now includes a
+Layers 1 through 4 are implemented. The application now includes a
 provider-neutral durable scan job/lease engine, a separately run worker,
 authenticated workspace-scoped product APIs, explicit session provisioning,
 exact execution snapshots, and functional server-rendered/live Shortlist,
 Live scan, Rolodex, Tuning, Taste log, and Scan history surfaces.
 
 The static `web/` app and Python Tier 0/Tier 1 engine remain authoritative and
-available. Repository-backed two-way sync, operational backups, and deployment
-topology remain layer 4. The scan worker and tuning preview call the existing
-Python prompt builder and evaluator rather than translating their rules into
-TypeScript.
+available. Layer 4 adds conflict-aware repository sync, local/git and GitHub
+integration adapters, signed webhook ingestion, durable repository jobs,
+deliberate Postgres backup/restore, and vendor-neutral OCI packaging. The scan
+worker and tuning preview still call the existing Python prompt builder and
+evaluator rather than translating their rules into TypeScript.
 
 ### Build threshold and operating cost
 
@@ -114,7 +115,8 @@ All write routes require authenticated team access. Responses return structured 
 | `GET /api/taste-log` | Return paginated entries newest first. |
 | `POST /api/taste-log` | Add one dated taste observation. |
 | `PATCH /api/taste-log/:id` | Correct an existing entry while preserving audit metadata. |
-| `POST /api/rolodex/sync` | Run an authenticated markdown import or export and return conflicts and the resulting revision. |
+| `POST /api/rolodex/sync` | Authenticated, idempotent request that durably queues markdown reconciliation/import/export and returns job IDs. |
+| `GET /api/rolodex/sync` | Return recent sync jobs, failures, repository/database revisions, hashes, and open-conflict count. |
 
 ### Dashboard
 

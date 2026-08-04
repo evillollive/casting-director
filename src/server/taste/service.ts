@@ -6,6 +6,7 @@ import type {
   tasteLogQuerySchema,
 } from "@/domain/api-contract";
 import type { AuthenticatedPrincipal } from "@/server/auth/adapter";
+import { enqueueRepositorySync } from "@/server/sync/enqueue";
 
 type TasteLogQuery = z.infer<typeof tasteLogQuerySchema>;
 type TasteLogCreate = z.infer<typeof tasteLogCreateSchema>;
@@ -109,8 +110,8 @@ export async function createTasteLogEntry(
   principal: AuthenticatedPrincipal,
   input: TasteLogCreate,
 ) {
-  return database.$transaction(async (tx) =>
-    tx.tasteLogEntry.create({
+  return database.$transaction(async (tx) => {
+    const created = await tx.tasteLogEntry.create({
       data: {
         workspaceId: principal.workspaceId,
         weekOf: new Date(`${input.weekOf}T00:00:00.000Z`),
@@ -126,8 +127,15 @@ export async function createTasteLogEntry(
         },
       },
       include: tasteLogInclude,
-    }),
-  );
+    });
+    await enqueueRepositorySync(tx, {
+      workspaceId: principal.workspaceId,
+      document: "TASTE_LOG",
+      direction: "EXPORT",
+      idempotencyKey: `taste:${created.id}:1`,
+    });
+    return created;
+  });
 }
 
 export async function updateTasteLogEntry(
@@ -163,6 +171,12 @@ export async function updateTasteLogEntry(
         note: input.note,
         editedById: principal.userId,
       },
+    });
+    await enqueueRepositorySync(tx, {
+      workspaceId: principal.workspaceId,
+      document: "TASTE_LOG",
+      direction: "EXPORT",
+      idempotencyKey: `taste:${entryId}:${input.version + 1}`,
     });
     return tx.tasteLogEntry.findFirstOrThrow({
       where: { id: entryId, workspaceId: principal.workspaceId },

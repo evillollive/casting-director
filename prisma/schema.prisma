@@ -94,6 +94,11 @@ enum SyncConflictStatus {
   RESOLVED_MARKDOWN
 }
 
+enum RepositorySyncDirection {
+  IMPORT
+  EXPORT
+}
+
 model User {
   id                String                  @id @default(cuid())
   email             String                  @unique
@@ -151,19 +156,20 @@ model AuthSession {
 }
 
 model Workspace {
-  id              String                @id @default(cuid())
-  slug            String                @unique
-  name            String
-  createdAt       DateTime              @default(now())
-  updatedAt       DateTime              @updatedAt
-  version         Int                   @default(1)
-  memberships     WorkspaceMembership[]
-  candidates      Candidate[]
-  tags            Tag[]
-  scans           Scan[]
-  tuningConfig    TuningConfig?
-  tasteLogEntries TasteLogEntry[]
-  syncStates      MarkdownSyncState[]
+  id                 String                @id @default(cuid())
+  slug               String                @unique
+  name               String
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+  version            Int                   @default(1)
+  memberships        WorkspaceMembership[]
+  candidates         Candidate[]
+  tags               Tag[]
+  scans              Scan[]
+  tuningConfig       TuningConfig?
+  tasteLogEntries    TasteLogEntry[]
+  syncStates         MarkdownSyncState[]
+  repositorySyncJobs RepositorySyncJob[]
 
   @@map("workspaces")
 }
@@ -230,6 +236,8 @@ model Candidate {
   notForSurfacing      Boolean                 @default(false)
   parkedReason         String?
   doNotResurface       Boolean                 @default(false)
+  doNotResurfaceDate   DateTime?               @db.Date
+  publicSyncNote       String?
   status               CandidateStatus         @default(NEW)
   firstScanId          String?
   latestScanId         String?
@@ -600,6 +608,9 @@ model MarkdownSyncState {
   lastExportedDatabaseRevision   Int?
   lastImportedAt                 DateTime?
   lastExportedAt                 DateTime?
+  baseSnapshot                   Json                   @default("{}")
+  lastDatabaseHash               String?
+  lastRepositoryHash             String?
   createdAt                      DateTime               @default(now())
   updatedAt                      DateTime               @updatedAt
   version                        Int                    @default(1)
@@ -627,4 +638,32 @@ model MarkdownSyncConflict {
 
   @@index([syncStateId, status])
   @@map("markdown_sync_conflicts")
+}
+
+model RepositorySyncJob {
+  id                 String                  @id @default(cuid())
+  workspaceId        String
+  document           MarkdownDocumentKind
+  direction          RepositorySyncDirection
+  status             ScanJobStatus           @default(READY)
+  idempotencyKey     String
+  attempt            Int                     @default(0)
+  maxAttempts        Int                     @default(5)
+  availableAt        DateTime                @default(now())
+  leaseOwner         String?
+  leaseToken         String?                 @unique
+  leaseExpiresAt     DateTime?
+  heartbeatAt        DateTime?
+  failureCode        String?
+  lastError          String?
+  repositoryRevision String?
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+  version            Int                     @default(1)
+  workspace          Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, idempotencyKey])
+  @@index([status, availableAt])
+  @@index([workspaceId, document, direction, createdAt])
+  @@map("repository_sync_jobs")
 }

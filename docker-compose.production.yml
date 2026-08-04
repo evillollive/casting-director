@@ -1,0 +1,103 @@
+x-app-environment: &app-environment
+  DATABASE_URL: postgresql://casting:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/casting
+  CASTING_APP_URL: ${CASTING_APP_URL:?set CASTING_APP_URL}
+  CASTING_AUTH_SECRET: ${CASTING_AUTH_SECRET:?set CASTING_AUTH_SECRET}
+  CASTING_AUTH_ADAPTER: session
+  CASTING_WORKSPACE_SLUG: ${CASTING_WORKSPACE_SLUG:-casting}
+  CASTING_REPOSITORY_PROVIDER: ${CASTING_REPOSITORY_PROVIDER:?set to github, or add a writable repository mount for local}
+  CASTING_REPOSITORY_ROOT: ${CASTING_REPOSITORY_ROOT:-/app}
+  CASTING_REPOSITORY_COMMIT: ${CASTING_REPOSITORY_COMMIT:-false}
+  CASTING_GITHUB_API_URL: ${CASTING_GITHUB_API_URL:-https://api.github.com}
+  CASTING_GITHUB_REPOSITORY: ${CASTING_GITHUB_REPOSITORY:-}
+  CASTING_GITHUB_BRANCH: ${CASTING_GITHUB_BRANCH:-main}
+  CASTING_GITHUB_TOKEN: ${CASTING_GITHUB_TOKEN:-}
+  CASTING_WEBHOOK_SECRET: ${CASTING_WEBHOOK_SECRET:-}
+  CASTING_SYNC_ACTOR_EMAIL: ${CASTING_SYNC_ACTOR_EMAIL:-}
+  CASTING_MAX_REQUEST_BYTES: ${CASTING_MAX_REQUEST_BYTES:-262144}
+
+x-app-base: &app-base
+  image: ${CASTING_IMAGE:-casting-director:local}
+  restart: unless-stopped
+  read_only: true
+  init: true
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  tmpfs:
+    - /tmp:mode=1777,size=256m
+
+services:
+  db:
+    image: postgres:16.4-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: casting
+      POSTGRES_USER: casting
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U casting -d casting"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    security_opt:
+      - no-new-privileges:true
+
+  migrate:
+    <<: *app-base
+    restart: "no"
+    command: ["migrate"]
+    environment:
+      <<: *app-environment
+      CASTING_ROLE: migrate
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    <<: *app-base
+    command: ["web"]
+    environment:
+      <<: *app-environment
+      CASTING_ROLE: web
+    ports:
+      - "127.0.0.1:${CASTING_PORT:-3000}:3000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "/app/scripts/container-entrypoint.sh", "healthcheck"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    stop_grace_period: 30s
+
+  worker:
+    <<: *app-base
+    command: ["worker"]
+    environment:
+      <<: *app-environment
+      CASTING_ROLE: worker
+      CASTING_LLM_API_KEY: ${CASTING_LLM_API_KEY:?set CASTING_LLM_API_KEY}
+      CASTING_LLM_API_URL: ${CASTING_LLM_API_URL:?set CASTING_LLM_API_URL}
+      CASTING_LLM_MODEL: ${CASTING_LLM_MODEL:?set CASTING_LLM_MODEL}
+      CASTING_LLM_TIMEOUT_SECONDS: ${CASTING_LLM_TIMEOUT_SECONDS:-120}
+      CASTING_WORKER_POLL_MS: ${CASTING_WORKER_POLL_MS:-2000}
+      CASTING_WORKER_LEASE_SECONDS: ${CASTING_WORKER_LEASE_SECONDS:-120}
+      CASTING_WORKER_MAX_ATTEMPTS: ${CASTING_WORKER_MAX_ATTEMPTS:-3}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "/app/scripts/container-entrypoint.sh", "healthcheck"]
+      interval: 30s
+      timeout: 15s
+      start_period: 20s
+      retries: 3
+    stop_grace_period: 2m30s
+
+volumes:
+  postgres-data:

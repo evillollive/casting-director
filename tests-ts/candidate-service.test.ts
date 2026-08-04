@@ -244,8 +244,8 @@ describe("candidate service", () => {
     const tx = {
       candidate: {
         findMany: vi.fn().mockResolvedValue([
-          { id: "candidate-1", status: "NEW" },
-          { id: "candidate-2", status: "CONTACTED" },
+          { id: "candidate-1", status: "NEW", version: 1 },
+          { id: "candidate-2", status: "CONTACTED", version: 3 },
         ]),
         updateMany: vi.fn().mockResolvedValue({ count: 2 }),
       },
@@ -255,6 +255,7 @@ describe("candidate service", () => {
         createMany: vi.fn(),
       },
       candidateStatusChange: { createMany: vi.fn() },
+      repositorySyncJob: { createMany: vi.fn() },
     };
 
     await expect(

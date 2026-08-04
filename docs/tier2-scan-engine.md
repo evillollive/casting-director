@@ -112,6 +112,10 @@ rubric or evaluator. Failed scans retain source errors, retry state, evaluator
 violations, and an optional diagnostic report, but only completed,
 evaluator-passing reports appear on Shortlist.
 
-Repository two-way sync, backups, and deployment topology are intentionally
-deferred to layer 4. The static `web/` application remains the supported
+Layer 4 is implemented through the same worker process: durable repository jobs
+reconcile Postgres with the two canonical rolodex markdown files through a
+provider-neutral local/git or GitHub REST adapter. Conflicts stop export and
+remain visible until a team member chooses a side. See
+[`tier2-operations.md`](tier2-operations.md) for runtime, backup, restore, and
+recovery procedures. The static `web/` application remains the supported
 no-infrastructure path.

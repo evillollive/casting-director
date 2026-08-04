@@ -9,6 +9,9 @@ const migrationPath = resolve(
 const scanJobsMigrationPath = resolve(
   "prisma/migrations/20260804203000_tier_2_scan_jobs/migration.sql",
 );
+const repositoryOperationsMigrationPath = resolve(
+  "prisma/migrations/20260804224500_tier_2_repository_operations/migration.sql",
+);
 
 let database: PGlite;
 
@@ -35,6 +38,7 @@ describe.sequential("PostgreSQL migration", () => {
     database = new PGlite();
     await database.exec(await readFile(migrationPath, "utf8"));
     await database.exec(await readFile(scanJobsMigrationPath, "utf8"));
+    await database.exec(await readFile(repositoryOperationsMigrationPath, "utf8"));
     await database.exec(`
       INSERT INTO "users" (
         "id", "email", "displayName", "updatedAt"
@@ -59,7 +63,7 @@ describe.sequential("PostgreSQL migration", () => {
       FROM information_schema.tables
       WHERE table_schema = 'public'
     `);
-    expect(result.rows[0]?.count).toBeGreaterThanOrEqual(26);
+    expect(result.rows[0]?.count).toBeGreaterThanOrEqual(27);
   });
 
   it("enforces one active scan in a workspace", async () => {
@@ -71,6 +75,31 @@ describe.sequential("PostgreSQL migration", () => {
       UPDATE "scans"
       SET "status" = 'FAILED', "updatedAt" = CURRENT_TIMESTAMP
       WHERE "id" = 'scan-active'
+    `);
+  });
+
+  it("serializes repository jobs for the same workspace document", async () => {
+    await database.exec(`
+      INSERT INTO "repository_sync_jobs" (
+        "id", "workspaceId", "document", "direction", "status",
+        "idempotencyKey", "updatedAt"
+      ) VALUES
+        ('repo-job-1', 'workspace-1', 'DO_NOT_RESURFACE', 'EXPORT', 'RUNNING',
+         'repo-job-1', CURRENT_TIMESTAMP),
+        ('repo-job-2', 'workspace-1', 'DO_NOT_RESURFACE', 'IMPORT', 'READY',
+         'repo-job-2', CURRENT_TIMESTAMP)
+    `);
+    await expect(
+      database.exec(`
+        UPDATE "repository_sync_jobs"
+        SET "status" = 'RUNNING', "updatedAt" = CURRENT_TIMESTAMP
+        WHERE "id" = 'repo-job-2'
+      `),
+    ).rejects.toThrow();
+    await database.exec(`
+      UPDATE "repository_sync_jobs"
+      SET "status" = 'SUCCEEDED', "updatedAt" = CURRENT_TIMESTAMP
+      WHERE "id" = 'repo-job-1'
     `);
   });
 

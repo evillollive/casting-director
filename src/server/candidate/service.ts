@@ -6,6 +6,7 @@ import type {
   candidateQuerySchema,
 } from "@/domain/api-contract";
 import type { AuthenticatedPrincipal } from "@/server/auth/adapter";
+import { enqueueRepositorySync } from "@/server/sync/enqueue";
 
 type CandidateQuery = z.infer<typeof candidateQuerySchema>;
 type CandidatePatch = z.infer<typeof candidatePatchSchema>;
@@ -300,10 +301,20 @@ function candidateUpdateData(
     | "notForSurfacing"
     | "parkedReason"
   >,
+  currentDoNotResurface?: boolean,
 ): Prisma.CandidateUpdateManyMutationInput {
   return {
     status: input.status,
     doNotResurface: input.doNotResurface,
+    doNotResurfaceDate:
+      input.doNotResurface === undefined
+        ? undefined
+        : input.doNotResurface
+          ? currentDoNotResurface
+            ? undefined
+            : new Date()
+          : null,
+    publicSyncNote: input.doNotResurface === false ? null : undefined,
     notForSurfacing: input.notForSurfacing,
     parkedReason: input.parkedReason,
     version: { increment: 1 },
@@ -319,7 +330,7 @@ export async function updateCandidate(
   return database.$transaction(async (tx) => {
     const current = await tx.candidate.findFirst({
       where: { id: candidateId, workspaceId: principal.workspaceId },
-      select: { id: true, status: true },
+      select: { id: true, status: true, doNotResurface: true },
     });
     if (!current) throw new CandidateNotFoundError([candidateId]);
     await assertWorkspaceTags(tx, principal.workspaceId, input.tagIds);
@@ -330,7 +341,7 @@ export async function updateCandidate(
         workspaceId: principal.workspaceId,
         version: input.version,
       },
-      data: candidateUpdateData(input),
+      data: candidateUpdateData(input, current.doNotResurface),
     });
     if (updated.count !== 1) throw new CandidateVersionConflictError();
 
@@ -361,6 +372,14 @@ export async function updateCandidate(
         },
       });
     }
+    if (input.doNotResurface !== undefined) {
+      await enqueueRepositorySync(tx, {
+        workspaceId: principal.workspaceId,
+        document: "DO_NOT_RESURFACE",
+        direction: "EXPORT",
+        idempotencyKey: `candidate:${candidateId}:dnr:${input.version + 1}`,
+      });
+    }
 
     return tx.candidate.findFirstOrThrow({
       where: { id: candidateId, workspaceId: principal.workspaceId },
@@ -382,7 +401,7 @@ export async function bulkUpdateCandidates(
             workspaceId: principal.workspaceId,
             id: { in: input.candidateIds },
           },
-          select: { id: true, status: true },
+          select: { id: true, status: true, version: true },
         });
         const found = new Set(candidates.map(({ id }) => id));
         const missing = input.candidateIds.filter((id) => !found.has(id));
@@ -424,6 +443,17 @@ export async function bulkUpdateCandidates(
           if (changes.length > 0) {
             await tx.candidateStatusChange.createMany({ data: changes });
           }
+        }
+        if (input.doNotResurface !== undefined) {
+          await enqueueRepositorySync(tx, {
+            workspaceId: principal.workspaceId,
+            document: "DO_NOT_RESURFACE",
+            direction: "EXPORT",
+            idempotencyKey: `candidate-bulk:${candidates
+              .map(({ id, version }) => `${id}:${version + 1}`)
+              .sort()
+              .join(",")}`,
+          });
         }
         return { updatedCount: updated.count };
       },

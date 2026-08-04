@@ -16,6 +16,16 @@ const runtimeConfigSchema = z.object({
     .string()
     .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
     .default("casting"),
+  CASTING_REPOSITORY_PROVIDER: z.enum(["local", "github"]).default("local"),
+  CASTING_REPOSITORY_ROOT: z.string().min(1).default("."),
+  CASTING_REPOSITORY_COMMIT: z.enum(["true", "false"]).default("false"),
+  CASTING_GITHUB_API_URL: z.string().url().default("https://api.github.com"),
+  CASTING_GITHUB_REPOSITORY: z.string().default(""),
+  CASTING_GITHUB_BRANCH: z.string().min(1).default("main"),
+  CASTING_GITHUB_TOKEN: z.string().default(""),
+  CASTING_WEBHOOK_SECRET: z.string().default(""),
+  CASTING_SYNC_ACTOR_EMAIL: z.union([z.email(), z.literal("")]).default(""),
+  CASTING_MAX_REQUEST_BYTES: z.coerce.number().int().min(1_024).max(10_485_760).default(262_144),
 });
 
 export type RuntimeConfig = z.infer<typeof runtimeConfigSchema>;
@@ -44,6 +54,46 @@ export class ConfigurationError extends Error {
   }
 }
 
+function operationalConfigurationErrors(
+  config: RuntimeConfig,
+  environment: Record<string, string | undefined>,
+): Record<string, string[]> {
+  const fields: Record<string, string[]> = {};
+  if (
+    environment.NODE_ENV === "production" &&
+    config.CASTING_AUTH_SECRET.startsWith("replace-with-")
+  ) {
+    fields.CASTING_AUTH_SECRET = [
+      "Production requires a generated auth secret, not the example placeholder.",
+    ];
+  }
+  if (
+    config.CASTING_WEBHOOK_SECRET &&
+    config.CASTING_WEBHOOK_SECRET.length < 32
+  ) {
+    fields.CASTING_WEBHOOK_SECRET = [
+      "CASTING_WEBHOOK_SECRET must be at least 32 characters when configured.",
+    ];
+  }
+  if (
+    config.CASTING_REPOSITORY_PROVIDER === "github" &&
+    !/^[^/]+\/[^/]+$/.test(config.CASTING_GITHUB_REPOSITORY)
+  ) {
+    fields.CASTING_GITHUB_REPOSITORY = [
+      "GitHub integration requires an owner/repository value.",
+    ];
+  }
+  if (
+    config.CASTING_REPOSITORY_PROVIDER === "github" &&
+    !config.CASTING_GITHUB_TOKEN
+  ) {
+    fields.CASTING_GITHUB_TOKEN = [
+      "GitHub integration requires a fine-grained repository token.",
+    ];
+  }
+  return fields;
+}
+
 export function readRuntimeConfig(
   environment: Record<string, string | undefined> = process.env,
 ): RuntimeConfig {
@@ -55,6 +105,10 @@ export function readRuntimeConfig(
       fields[key] = [...(fields[key] ?? []), issue.message];
     }
     throw new ConfigurationError(fields);
+  }
+  const operational = operationalConfigurationErrors(result.data, environment);
+  if (Object.keys(operational).length > 0) {
+    throw new ConfigurationError(operational);
   }
   return result.data;
 }
@@ -70,6 +124,10 @@ export function readWorkerConfig(
       fields[key] = [...(fields[key] ?? []), issue.message];
     }
     throw new ConfigurationError(fields);
+  }
+  const operational = operationalConfigurationErrors(result.data, environment);
+  if (Object.keys(operational).length > 0) {
+    throw new ConfigurationError(operational);
   }
   return result.data;
 }

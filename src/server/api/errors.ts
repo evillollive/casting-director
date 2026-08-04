@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { ApiErrorBody } from "@/domain/api-contract";
 import { AuthenticationRequiredError } from "@/server/auth/adapter";
+import { errorLogMessage } from "@/server/logging";
 
 export function validationErrorResponse(error: z.ZodError): Response {
   const fields: Record<string, string[]> = {};
@@ -51,7 +52,7 @@ export function routeErrorResponse(error: unknown): Response {
   if (error instanceof AuthenticationRequiredError) {
     return authenticationErrorResponse();
   }
-  console.error("API request failed.", error);
+  console.error("API request failed.", errorLogMessage(error));
   return apiErrorResponse(
     "INTERNAL_ERROR",
     "The request could not be completed.",

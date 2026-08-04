@@ -9,6 +9,7 @@
   "scripts": {
     "postinstall": "prisma generate",
     "dev": "next dev",
+    "start": "next start",
     "build": "next build",
     "lint": "eslint . --max-warnings=0",
     "test": "vitest run",
@@ -18,9 +19,12 @@
     "db:migrate": "prisma migrate deploy",
     "db:import-memory": "tsx scripts/import-memory.ts",
     "auth:bootstrap": "tsx scripts/bootstrap-auth.ts",
-    "worker": "tsx src/worker/cli.ts"
+    "worker": "tsx src/worker/cli.ts",
+    "backup:postgres": "bash scripts/backup-postgres.sh",
+    "restore:postgres": "bash scripts/restore-postgres.sh"
   },
   "dependencies": {
+    "@casting/python-bridge": "file:runtime/python-bridge",
     "@prisma/client": "6.19.1",
     "next": "16.2.1",
     "react": "19.2.4",

@@ -13,6 +13,7 @@ import {
   TasteLogVersionConflictError,
   updateTasteLogEntry,
 } from "@/server/taste/service";
+import { jsonBodyErrorResponse, readApiJson } from "@/server/api/body";
 
 export const dynamic = "force-dynamic";
 
@@ -23,13 +24,9 @@ export async function PATCH(request: Request, context: RouteContext) {
     const principal = await requirePrincipal(authAdapter(), request);
     let body: unknown;
     try {
-      body = await request.json();
-    } catch {
-      return apiErrorResponse(
-        "INVALID_JSON",
-        "The request body must be valid JSON.",
-        400,
-      );
+      body = await readApiJson(request);
+    } catch (error) {
+      return jsonBodyErrorResponse(error);
     }
     const parsed = tasteLogPatchSchema.safeParse(body);
     if (!parsed.success) return validationErrorResponse(parsed.error);

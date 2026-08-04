@@ -36,4 +36,29 @@ describe("runtime configuration", () => {
       });
     }
   });
+
+  it("rejects placeholder production secrets and incomplete GitHub integration", () => {
+    expect(() =>
+      readRuntimeConfig({
+        ...validEnvironment,
+        NODE_ENV: "production",
+        CASTING_AUTH_SECRET: "replace-with-at-least-32-random-characters",
+        CASTING_REPOSITORY_PROVIDER: "github",
+      }),
+    ).toThrowError(ConfigurationError);
+    try {
+      readRuntimeConfig({
+        ...validEnvironment,
+        NODE_ENV: "production",
+        CASTING_AUTH_SECRET: "replace-with-at-least-32-random-characters",
+        CASTING_REPOSITORY_PROVIDER: "github",
+      });
+    } catch (error) {
+      expect((error as ConfigurationError).fields).toMatchObject({
+        CASTING_AUTH_SECRET: expect.any(Array),
+        CASTING_GITHUB_REPOSITORY: expect.any(Array),
+        CASTING_GITHUB_TOKEN: expect.any(Array),
+      });
+    }
+  });
 });

@@ -16,6 +16,7 @@ import {
   listScans,
   UnknownScanSourcesError,
 } from "@/server/scan/service";
+import { jsonBodyErrorResponse, readApiJson } from "@/server/api/body";
 
 export const dynamic = "force-dynamic";
 
@@ -24,13 +25,9 @@ export async function POST(request: Request) {
     const principal = await requirePrincipal(authAdapter(), request);
     let body: unknown;
     try {
-      body = await request.json();
-    } catch {
-      return apiErrorResponse(
-        "INVALID_JSON",
-        "The request body must be valid JSON.",
-        400,
-      );
+      body = await readApiJson(request);
+    } catch (error) {
+      return jsonBodyErrorResponse(error);
     }
     const parsed = createScanSchema.safeParse(body);
     if (!parsed.success) return validationErrorResponse(parsed.error);

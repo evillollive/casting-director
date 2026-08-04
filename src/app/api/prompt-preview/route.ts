@@ -11,6 +11,7 @@ import {
   generatePromptPreview,
   PromptPreviewError,
 } from "@/server/prompt-preview";
+import { jsonBodyErrorResponse, readApiJson } from "@/server/api/body";
 
 const previewSchema = z.object({
   beat: z.string().trim().max(4_000),
@@ -23,9 +24,9 @@ export async function POST(request: Request) {
     const principal = await requirePrincipal(authAdapter(), request);
     let body: unknown;
     try {
-      body = await request.json();
-    } catch {
-      return apiErrorResponse("INVALID_JSON", "The request body must be valid JSON.", 400);
+      body = await readApiJson(request);
+    } catch (error) {
+      return jsonBodyErrorResponse(error);
     }
     const parsed = previewSchema.safeParse(body);
     if (!parsed.success) return validationErrorResponse(parsed.error);

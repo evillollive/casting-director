@@ -5,6 +5,7 @@ import { AccessState } from "@/components/access-state";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeading } from "@/components/page-heading";
 import { RolodexTable } from "@/app/rolodex/rolodex-table";
+import { SyncPanel } from "@/app/rolodex/sync-panel";
 import { prisma } from "@/server/db";
 import { resolvePageAccess } from "@/server/auth/page-auth";
 
@@ -57,7 +58,7 @@ export default async function RolodexPage({ searchParams }: { searchParams: Prom
       : sort === "name"
         ? [{ name: "asc" }, { id: "asc" }]
         : [{ updatedAt: "desc" }, { id: "desc" }];
-  const [items, total, tags] = await Promise.all([
+  const [items, total, tags, conflicts] = await Promise.all([
     prisma.candidate.findMany({
       where,
       orderBy,
@@ -74,6 +75,21 @@ export default async function RolodexPage({ searchParams }: { searchParams: Prom
       where: { workspaceId: access.principal.workspaceId },
       orderBy: { name: "asc" },
       select: { id: true, name: true, slug: true },
+    }),
+    prisma.markdownSyncConflict.findMany({
+      where: {
+        syncState: { workspaceId: access.principal.workspaceId },
+        status: "OPEN",
+      },
+      select: {
+        id: true,
+        normalizedIdentity: true,
+        databaseSnapshot: true,
+        markdownSnapshot: true,
+        version: true,
+        syncState: { select: { document: true } },
+      },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     }),
   ]);
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
@@ -105,6 +121,7 @@ export default async function RolodexPage({ searchParams }: { searchParams: Prom
   return (
     <div className="page-stack">
       <PageHeading eyebrow="Persistent memory" title="Rolodex" description="Search, filter, sort, and update durable candidate identity, provenance, status, tags, and authored context." />
+      <SyncPanel initialConflicts={conflicts} />
       <form className="filter-bar rolodex-filters">
         <label><span className="sr-only">Search candidates</span><input name="query" defaultValue={query} placeholder="Search people, handles, projects, or hooks" /></label>
         <label><span className="sr-only">Status filter</span><select name="status" defaultValue={status}><option value="">All statuses</option>{["NEW", "CONTACTED", "PASSED", "CAST", "MAYBE_LATER"].map((item) => <option key={item} value={item}>{item.replace("_", " ")}</option>)}</select></label>
