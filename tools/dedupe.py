@@ -111,7 +111,7 @@ def identity_tokens(candidate: RawCandidate) -> set[str]:
         tokens.add(f"handle:{handle}")
     if len(project_url) >= 3:
         tokens.add(f"project-url:{project_url}")
-    if len(name) >= 3 and len(project) >= 3:
+    if len(name) >= 3 and len(project) >= 3 and name != project:
         tokens.add(f"name-project:{name}|{project}")
     return tokens
 

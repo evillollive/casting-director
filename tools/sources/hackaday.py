@@ -15,7 +15,11 @@ class HackadaySource:
         self.client = client
 
     def fetch(self, since: datetime) -> SourceFetch:
-        text = self.client.get_text(self.endpoint, headers={"Accept": "application/rss+xml, application/xml"})
+        text = self.client.get_text(
+            self.endpoint,
+            headers={"Accept": "application/rss+xml, application/xml"},
+            retry=True,
+        )
         return SourceFetch(
             candidates=parse_rss(
                 text,

@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections import OrderedDict
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 
@@ -47,6 +48,44 @@ def remember_screening_results(store: SeenStore, briefs: list[CastingBrief], run
     store.record_parked(parked, parked_on=run_date.isoformat())
 
 
+def select_for_screening(candidates, limit: int):
+    """Balance feeds, then spread each feed's picks across its returned window."""
+    groups = OrderedDict()
+    for candidate in candidates:
+        groups.setdefault(candidate.source_family, []).append(candidate)
+    counts = {family: 0 for family in groups}
+    selected_count = 0
+    while selected_count < limit:
+        progressed = False
+        for family, items in groups.items():
+            if selected_count >= limit:
+                break
+            if counts[family] < len(items):
+                counts[family] += 1
+                selected_count += 1
+                progressed = True
+        if not progressed:
+            break
+
+    spread = {}
+    for family, items in groups.items():
+        count = counts[family]
+        if count == 0:
+            spread[family] = []
+        elif count == 1:
+            spread[family] = [items[0]]
+        else:
+            indexes = [round(index * (len(items) - 1) / (count - 1)) for index in range(count)]
+            spread[family] = [items[index] for index in indexes]
+
+    selected = []
+    for offset in range(max(counts.values(), default=0)):
+        for family in groups:
+            if offset < len(spread[family]):
+                selected.append(spread[family][offset])
+    return selected
+
+
 def run_pipeline(
     *,
     run_date: date,
@@ -68,7 +107,7 @@ def run_pipeline(
         seen_store=store,
         as_of=run_date,
     )
-    survivors = deduped.survivors[:max_candidates]
+    survivors = select_for_screening(deduped.survivors, max_candidates)
     if not survivors:
         # Empty reports cannot pass casting_eval's NO_ENTRIES guard, and treating
         # collection or memory loss as a quiet week would create a false success.

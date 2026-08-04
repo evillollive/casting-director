@@ -7,11 +7,11 @@ from datetime import date
 from pathlib import Path
 
 import casting_eval as ce
-from dedupe import SeenStore, dedupe_candidates
+from dedupe import SeenStore, dedupe_candidates, identity_tokens
 from render_report import render_report, select_shortlist
 from screen import CastingBrief, ScreenConfigurationError, ScreenResponseError, brief_from_mapping
 from sources import RawCandidate, SourceFetch
-from weekly_scan import load_seen_store, remember_screening_results, run_pipeline
+from weekly_scan import load_seen_store, remember_screening_results, run_pipeline, select_for_screening
 
 
 def raw(
@@ -104,6 +104,30 @@ def test_dedupe_does_not_merge_unrelated_people_with_a_common_project_title(tmp_
 
     assert result.survivors == [first, second]
     assert result.seen == []
+
+
+def test_degenerate_title_as_name_does_not_create_a_composite_identity():
+    candidate = replace(raw(1), name="Same title", project="Same title", handle="")
+
+    assert all(not token.startswith("name-project:") for token in identity_tokens(candidate))
+    assert identity_tokens(candidate) == {"project-url:builder1/project"}
+
+
+def test_screening_selection_balances_sources_and_spreads_each_source_window():
+    hn = [raw(index) for index in range(1, 7)]
+    github = [
+        raw(index, source="GitHub", family="github", source_url=f"https://github.com/b{index}/p")
+        for index in range(7, 9)
+    ]
+
+    selected = select_for_screening(hn + github, 4)
+
+    assert [candidate.fingerprint for candidate in selected] == [
+        "test:1",
+        "test:7",
+        "test:6",
+        "test:8",
+    ]
 
 
 def test_parked_candidate_returns_after_cooldown_but_shortlisted_candidate_does_not(tmp_path: Path):

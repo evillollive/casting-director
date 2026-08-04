@@ -6,6 +6,7 @@ import re
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
+from typing import Callable
 
 from .base import RawCandidate, stable_fingerprint
 
@@ -39,6 +40,7 @@ def parse_rss(
     since: datetime,
     source: str,
     source_family: str,
+    author_from_link: Callable[[str], str] | None = None,
 ) -> list[RawCandidate]:
     root = ET.fromstring(xml_text)
     entries = list(root.findall(".//item"))
@@ -58,6 +60,8 @@ def parse_rss(
             "author",
             "{http://www.w3.org/2005/Atom}author/{http://www.w3.org/2005/Atom}name",
         )
+        if not author and author_from_link:
+            author = author_from_link(link)
         published = _published(
             _text(
                 entry,
@@ -79,11 +83,11 @@ def parse_rss(
         )
         context = html.unescape(TAG_RE.sub(" ", description))
         context = re.sub(r"\s+", " ", context).strip()
-        if not title or not link:
+        if not title or not link or not author:
             continue
         out.append(
             RawCandidate(
-                name=author or title,
+                name=author,
                 handle=author,
                 project=title,
                 project_url=link,

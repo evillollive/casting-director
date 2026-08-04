@@ -26,8 +26,8 @@ class GitHubSource:
         data = self.client.get_json(
             self.endpoint,
             params={
-                "q": f"created:>{since.date().isoformat()} stars:>20",
-                "sort": "stars",
+                "q": f"created:>{since.date().isoformat()} stars:5..200",
+                "sort": "updated",
                 "order": "desc",
                 "per_page": 50,
             },

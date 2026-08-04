@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 import urllib.parse
+import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -40,6 +42,19 @@ class Source(Protocol):
 class HttpClient:
     """Small injectable HTTP client used by every connector."""
 
+    def __init__(
+        self,
+        *,
+        max_retries: int = 2,
+        backoff_seconds: float = 1.0,
+        opener=None,
+        sleeper=None,
+    ):
+        self.max_retries = max_retries
+        self.backoff_seconds = backoff_seconds
+        self.opener = opener or urllib.request.urlopen
+        self.sleeper = sleeper or time.sleep
+
     def get_bytes(
         self,
         url: str,
@@ -47,6 +62,7 @@ class HttpClient:
         params: dict | None = None,
         headers: dict | None = None,
         timeout: int = 20,
+        retry: bool = False,
     ) -> bytes:
         if params:
             query = urllib.parse.urlencode(params)
@@ -54,8 +70,21 @@ class HttpClient:
         request_headers = {"User-Agent": USER_AGENT, "Accept": "*/*"}
         request_headers.update(headers or {})
         request = urllib.request.Request(url, headers=request_headers)
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            return response.read()
+        retries = self.max_retries if retry else 0
+        for attempt in range(retries + 1):
+            try:
+                with self.opener(request, timeout=timeout) as response:
+                    return response.read()
+            except urllib.error.HTTPError as exc:
+                retryable = exc.code == 429 or 500 <= exc.code < 600
+                if not retryable or attempt >= retries:
+                    raise
+                retry_after = exc.headers.get("Retry-After") if exc.headers else None
+                try:
+                    delay = min(float(retry_after), 30.0) if retry_after else None
+                except ValueError:
+                    delay = None
+                self.sleeper(delay if delay is not None else self.backoff_seconds * (2**attempt))
 
     def get_text(self, url: str, **kwargs) -> str:
         return self.get_bytes(url, **kwargs).decode("utf-8", errors="replace")
