@@ -1,0 +1,574 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  MEMBER
+  ADMIN
+}
+
+enum AuthIdentityKind {
+  OIDC
+  EMAIL
+  DEVELOPMENT
+}
+
+enum CandidateStatus {
+  NEW         @map("new")
+  CONTACTED   @map("contacted")
+  PASSED      @map("passed")
+  CAST        @map("cast")
+  MAYBE_LATER @map("maybe-later")
+}
+
+enum SourceFamily {
+  NEWS
+  CODE_HOST
+  COMMUNITY
+  MAKER
+  GAMES
+  VIDEO
+  SOCIAL
+  SCIENCE
+  CIVIC
+  ACCESSIBILITY
+  OTHER
+}
+
+enum ScanStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum ScanSourceStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum ScanCandidatePlacement {
+  SHORTLIST
+  PARKING_LOT
+  HARD_EXCLUDED
+}
+
+enum ViolationSeverity {
+  ERROR
+  WARNING
+}
+
+enum TuningItemKind {
+  HARD_NO
+  MORE_OF
+}
+
+enum MarkdownDocumentKind {
+  DO_NOT_RESURFACE
+  TASTE_LOG
+}
+
+enum SyncConflictStatus {
+  OPEN
+  RESOLVED_DATABASE
+  RESOLVED_MARKDOWN
+}
+
+model User {
+  id                String                  @id @default(cuid())
+  email             String                  @unique
+  displayName       String
+  active            Boolean                 @default(true)
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+  version           Int                     @default(1)
+  identities        AuthIdentity[]
+  sessions          AuthSession[]
+  memberships       WorkspaceMembership[]
+  candidateNotes    CandidateNote[]
+  candidateChanges  CandidateStatusChange[]
+  candidateMerges   CandidateMerge[]
+  triggeredScans    Scan[]
+  createdTuning     TuningConfig[]          @relation("TuningCreatedBy")
+  updatedTuning     TuningConfig[]          @relation("TuningUpdatedBy")
+  tuningRevisions   TuningConfigRevision[]
+  createdTasteLogs  TasteLogEntry[]         @relation("TasteLogCreatedBy")
+  updatedTasteLogs  TasteLogEntry[]         @relation("TasteLogUpdatedBy")
+  tasteLogRevisions TasteLogEntryRevision[]
+  resolvedConflicts MarkdownSyncConflict[]
+
+  @@map("users")
+}
+
+model AuthIdentity {
+  id        String           @id @default(cuid())
+  userId    String
+  kind      AuthIdentityKind
+  issuer    String
+  subject   String
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([kind, issuer, subject])
+  @@index([userId])
+  @@map("auth_identities")
+}
+
+model AuthSession {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  version   Int       @default(1)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@map("auth_sessions")
+}
+
+model Workspace {
+  id              String                @id @default(cuid())
+  slug            String                @unique
+  name            String
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  version         Int                   @default(1)
+  memberships     WorkspaceMembership[]
+  candidates      Candidate[]
+  tags            Tag[]
+  scans           Scan[]
+  tuningConfig    TuningConfig?
+  tasteLogEntries TasteLogEntry[]
+  syncStates      MarkdownSyncState[]
+
+  @@map("workspaces")
+}
+
+model WorkspaceMembership {
+  id          String    @id @default(cuid())
+  workspaceId String
+  userId      String
+  role        UserRole  @default(MEMBER)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  version     Int       @default(1)
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+  @@map("workspace_memberships")
+}
+
+model Source {
+  id          String                @id @default(cuid())
+  key         String                @unique
+  displayName String
+  family      SourceFamily
+  active      Boolean               @default(true)
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+  version     Int                   @default(1)
+  provenance  CandidateProvenance[]
+  scanSources ScanSource[]
+
+  @@index([family, active])
+  @@map("sources")
+}
+
+model Candidate {
+  id                   String                  @id @default(cuid())
+  workspaceId          String
+  name                 String
+  handle               String?
+  project              String?
+  projectUrl           String?
+  fingerprint          String
+  region               String?
+  hook                 String?
+  whyNow               String?
+  voice                String?
+  arc                  String?
+  reach                String?
+  caveat               String?
+  sensitivity          String?
+  rationale            String?
+  protagonistScore     Int?
+  visibleHookScore     Int?
+  whyNowScore          Int?
+  voiceScore           Int?
+  arcScore             Int?
+  reachScore           Int?
+  overallScore         Int?
+  isEvergreen          Boolean                 @default(false)
+  gatePassed           Boolean?
+  notForSurfacing      Boolean                 @default(false)
+  parkedReason         String?
+  doNotResurface       Boolean                 @default(false)
+  status               CandidateStatus         @default(NEW)
+  firstScanId          String?
+  latestScanId         String?
+  mergedIntoId         String?
+  firstSeenAt          DateTime                @default(now())
+  lastSeenAt           DateTime                @default(now())
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
+  version              Int                     @default(1)
+  workspace            Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  firstScan            Scan?                   @relation("CandidateFirstScan", fields: [firstScanId], references: [id], onDelete: SetNull)
+  latestScan           Scan?                   @relation("CandidateLatestScan", fields: [latestScanId], references: [id], onDelete: SetNull)
+  mergedInto           Candidate?              @relation("CandidateMergedInto", fields: [mergedIntoId], references: [id], onDelete: Restrict)
+  mergedCandidates     Candidate[]             @relation("CandidateMergedInto")
+  mergeRecordsAsSource CandidateMerge[]        @relation("CandidateMergeSource")
+  mergeRecordsAsTarget CandidateMerge[]        @relation("CandidateMergeTarget")
+  provenance           CandidateProvenance[]
+  scanAppearances      ScanCandidate[]
+  tags                 CandidateTag[]
+  notes                CandidateNote[]
+  statusChanges        CandidateStatusChange[]
+  evaluatorViolations  EvaluatorViolation[]
+
+  @@unique([workspaceId, fingerprint])
+  @@unique([id, workspaceId])
+  @@index([workspaceId, status, updatedAt])
+  @@index([workspaceId, doNotResurface, notForSurfacing])
+  @@index([workspaceId, gatePassed, overallScore])
+  @@index([mergedIntoId])
+  @@map("candidates")
+}
+
+model CandidateMerge {
+  id                String    @id @default(cuid())
+  sourceCandidateId String
+  targetCandidateId String
+  mergedById        String
+  reason            String
+  createdAt         DateTime  @default(now())
+  sourceCandidate   Candidate @relation("CandidateMergeSource", fields: [sourceCandidateId], references: [id], onDelete: Restrict)
+  targetCandidate   Candidate @relation("CandidateMergeTarget", fields: [targetCandidateId], references: [id], onDelete: Restrict)
+  mergedBy          User      @relation(fields: [mergedById], references: [id], onDelete: Restrict)
+
+  @@unique([sourceCandidateId])
+  @@index([targetCandidateId])
+  @@map("candidate_merges")
+}
+
+model CandidateProvenance {
+  id             String    @id @default(cuid())
+  candidateId    String
+  workspaceId    String
+  sourceId       String
+  sourceRecordId String?
+  sourceUrl      String
+  fingerprint    String
+  rawMetadata    Json?
+  firstSeenAt    DateTime  @default(now())
+  lastSeenAt     DateTime  @default(now())
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  version        Int       @default(1)
+  candidate      Candidate @relation(fields: [candidateId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  source         Source    @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+
+  @@unique([workspaceId, sourceId, fingerprint])
+  @@index([candidateId, lastSeenAt])
+  @@map("candidate_provenance")
+}
+
+model Tag {
+  id          String         @id @default(cuid())
+  workspaceId String
+  name        String
+  slug        String
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  version     Int            @default(1)
+  workspace   Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  candidates  CandidateTag[]
+
+  @@unique([workspaceId, slug])
+  @@map("tags")
+}
+
+model CandidateTag {
+  candidateId String
+  tagId       String
+  createdAt   DateTime  @default(now())
+  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  tag         Tag       @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([candidateId, tagId])
+  @@index([tagId])
+  @@map("candidate_tags")
+}
+
+model CandidateNote {
+  id          String    @id @default(cuid())
+  candidateId String
+  authorId    String
+  body        String
+  createdAt   DateTime  @default(now())
+  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  author      User      @relation(fields: [authorId], references: [id], onDelete: Restrict)
+
+  @@index([candidateId, createdAt])
+  @@map("candidate_notes")
+}
+
+model CandidateStatusChange {
+  id          String           @id @default(cuid())
+  candidateId String
+  authorId    String
+  fromStatus  CandidateStatus?
+  toStatus    CandidateStatus
+  reason      String?
+  createdAt   DateTime         @default(now())
+  candidate   Candidate        @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  author      User             @relation(fields: [authorId], references: [id], onDelete: Restrict)
+
+  @@index([candidateId, createdAt])
+  @@map("candidate_status_changes")
+}
+
+model Scan {
+  id                   String                @id @default(cuid())
+  workspaceId          String
+  status               ScanStatus            @default(PENDING)
+  triggeredById        String
+  tuningRevisionId     String?
+  startedAt            DateTime?
+  completedAt          DateTime?
+  candidatesFetched    Int                   @default(0)
+  candidatesDeduped    Int                   @default(0)
+  candidatesScreened   Int                   @default(0)
+  shortlistCount       Int                   @default(0)
+  parkingCount         Int                   @default(0)
+  summary              String?
+  reportMarkdown       String?
+  error                String?
+  runDate              DateTime              @db.Date
+  evalPassed           Boolean?
+  promptHash           String
+  configSnapshot       Json
+  tuningSnapshot       Json
+  tasteLogSnapshot     Json
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  version              Int                   @default(1)
+  workspace            Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  triggeredBy          User                  @relation(fields: [triggeredById], references: [id], onDelete: Restrict)
+  tuningRevision       TuningConfigRevision? @relation(fields: [tuningRevisionId], references: [id], onDelete: Restrict)
+  sources              ScanSource[]
+  candidates           ScanCandidate[]
+  evaluatorViolations  EvaluatorViolation[]
+  firstSeenCandidates  Candidate[]           @relation("CandidateFirstScan")
+  latestSeenCandidates Candidate[]           @relation("CandidateLatestScan")
+
+  @@index([workspaceId, status, createdAt])
+  @@index([workspaceId, runDate])
+  @@map("scans")
+}
+
+model ScanSource {
+  id           String           @id @default(cuid())
+  scanId       String
+  sourceId     String
+  status       ScanSourceStatus @default(PENDING)
+  fetchedCount Int              @default(0)
+  errorCode    String?
+  errorMessage String?
+  startedAt    DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  version      Int              @default(1)
+  scan         Scan             @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  source       Source           @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+
+  @@unique([scanId, sourceId])
+  @@index([scanId, status])
+  @@map("scan_sources")
+}
+
+model ScanCandidate {
+  id               String                 @id @default(cuid())
+  scanId           String
+  candidateId      String
+  placement        ScanCandidatePlacement
+  rank             Int?
+  hook             String
+  whyNow           String
+  voice            String
+  arc              String
+  reach            String
+  caveat           String?
+  sensitivity      String?
+  rationale        String
+  protagonistScore Int
+  visibleHookScore Int
+  whyNowScore      Int
+  voiceScore       Int
+  arcScore         Int
+  reachScore       Int
+  overallScore     Int
+  isEvergreen      Boolean                @default(false)
+  gatePassed       Boolean
+  notForSurfacing  Boolean                @default(false)
+  parkedReason     String?
+  modelMetadata    Json?
+  createdAt        DateTime               @default(now())
+  scan             Scan                   @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  candidate        Candidate              @relation(fields: [candidateId], references: [id], onDelete: Restrict)
+
+  @@unique([scanId, candidateId])
+  @@index([scanId, placement, rank])
+  @@map("scan_candidates")
+}
+
+model EvaluatorViolation {
+  id                 String            @id @default(cuid())
+  scanId             String
+  candidateId        String?
+  code               String
+  severity           ViolationSeverity
+  message            String
+  candidateReference String?
+  createdAt          DateTime          @default(now())
+  scan               Scan              @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  candidate          Candidate?        @relation(fields: [candidateId], references: [id], onDelete: SetNull)
+
+  @@index([scanId, severity])
+  @@index([candidateId])
+  @@map("evaluator_violations")
+}
+
+model TuningConfig {
+  id               String                 @id @default(cuid())
+  workspaceId      String                 @unique
+  activeRevisionId String?                @unique
+  createdById      String
+  updatedById      String
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+  version          Int                    @default(1)
+  workspace        Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy        User                   @relation("TuningCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedBy        User                   @relation("TuningUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+  activeRevision   TuningConfigRevision?  @relation("ActiveTuningRevision", fields: [activeRevisionId], references: [id], onDelete: Restrict)
+  revisions        TuningConfigRevision[] @relation("TuningRevisionHistory")
+
+  @@map("tuning_configs")
+}
+
+model TuningConfigRevision {
+  id             String               @id @default(cuid())
+  tuningConfigId String
+  revision       Int
+  beat           String
+  createdById    String
+  createdAt      DateTime             @default(now())
+  finalizedAt    DateTime?
+  tuningConfig   TuningConfig         @relation("TuningRevisionHistory", fields: [tuningConfigId], references: [id], onDelete: Cascade)
+  activeFor      TuningConfig?        @relation("ActiveTuningRevision")
+  createdBy      User                 @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  items          TuningRevisionItem[]
+  scans          Scan[]
+
+  @@unique([tuningConfigId, revision])
+  @@index([tuningConfigId, createdAt])
+  @@map("tuning_config_revisions")
+}
+
+model TuningRevisionItem {
+  id               String               @id @default(cuid())
+  tuningRevisionId String
+  kind             TuningItemKind
+  position         Int
+  value            String
+  tuningRevision   TuningConfigRevision @relation(fields: [tuningRevisionId], references: [id], onDelete: Cascade)
+
+  @@unique([tuningRevisionId, kind, position])
+  @@map("tuning_revision_items")
+}
+
+model TasteLogEntry {
+  id          String                  @id @default(cuid())
+  workspaceId String
+  weekOf      DateTime                @db.Date
+  note        String
+  createdById String
+  updatedById String
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
+  version     Int                     @default(1)
+  workspace   Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy   User                    @relation("TasteLogCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedBy   User                    @relation("TasteLogUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+  revisions   TasteLogEntryRevision[]
+
+  @@index([workspaceId, weekOf])
+  @@map("taste_log_entries")
+}
+
+model TasteLogEntryRevision {
+  id              String        @id @default(cuid())
+  tasteLogEntryId String
+  revision        Int
+  note            String
+  editedById      String
+  createdAt       DateTime      @default(now())
+  tasteLogEntry   TasteLogEntry @relation(fields: [tasteLogEntryId], references: [id], onDelete: Cascade)
+  editedBy        User          @relation(fields: [editedById], references: [id], onDelete: Restrict)
+
+  @@unique([tasteLogEntryId, revision])
+  @@index([tasteLogEntryId, createdAt])
+  @@map("taste_log_entry_revisions")
+}
+
+model MarkdownSyncState {
+  id                             String                 @id @default(cuid())
+  workspaceId                    String
+  document                       MarkdownDocumentKind
+  lastImportedRepositoryRevision String?
+  lastExportedDatabaseRevision   Int?
+  lastImportedAt                 DateTime?
+  lastExportedAt                 DateTime?
+  createdAt                      DateTime               @default(now())
+  updatedAt                      DateTime               @updatedAt
+  version                        Int                    @default(1)
+  workspace                      Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  conflicts                      MarkdownSyncConflict[]
+
+  @@unique([workspaceId, document])
+  @@map("markdown_sync_states")
+}
+
+model MarkdownSyncConflict {
+  id                 String             @id @default(cuid())
+  syncStateId        String
+  normalizedIdentity String
+  databaseSnapshot   Json
+  markdownSnapshot   Json
+  status             SyncConflictStatus @default(OPEN)
+  resolvedById       String?
+  resolvedAt         DateTime?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  version            Int                @default(1)
+  syncState          MarkdownSyncState  @relation(fields: [syncStateId], references: [id], onDelete: Cascade)
+  resolvedBy         User?              @relation(fields: [resolvedById], references: [id], onDelete: Restrict)
+
+  @@index([syncStateId, status])
+  @@map("markdown_sync_conflicts")
+}

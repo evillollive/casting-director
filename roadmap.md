@@ -32,6 +32,20 @@ Passing the evaluator is necessary but not sufficient. If the shortlist does not
 
 ## Tier 2: small app with a real rolodex
 
+### Implementation status
+
+Layer 1 is implemented as a self-contained application and persistence
+foundation. It adds a provider-neutral Next.js workspace, an authentication
+adapter boundary and team data primitives, typed API validation, a comprehensive
+Prisma/Postgres model and migration, immutable editorial history, and a
+bootstrap importer for the existing markdown memory.
+
+The static `web/` app and Python Tier 0/Tier 1 engine remain authoritative and
+available. The background worker, authenticated write routes, live database
+pages, repository-backed two-way sync, backups, and deployment topology remain
+follow-on layers. Those layers must call the existing Python prompt builder and
+evaluator rather than translating their rules into TypeScript.
+
 ### Build threshold and operating cost
 
 Build Tier 2 only after the team trusts several weeks of Tier 1 reports. Tier 2 replaces a free static and scheduled workflow with an always-on application, Postgres, background work, backups, and a hosting bill. GitHub Pages cannot host the application server or database. Keep Tier 0 and the static Pages app working as the no-infrastructure path even after Tier 2 launches.
