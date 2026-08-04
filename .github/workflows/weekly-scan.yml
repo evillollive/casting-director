@@ -1,0 +1,62 @@
+name: Weekly casting scan
+
+on:
+  schedule:
+    - cron: "17 15 * * 1"
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+  issues: write
+
+concurrency:
+  group: weekly-casting-scan
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Restore seen-list cache
+        uses: actions/cache@v5
+        with:
+          path: .casting/seen.json
+          key: casting-seen-${{ github.run_id }}
+          restore-keys: |
+            casting-seen-
+
+      - name: Set run date
+        id: run
+        run: echo "date=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+
+      - name: Run scheduled scan
+        env:
+          CASTING_LLM_API_KEY: ${{ secrets.CASTING_LLM_API_KEY }}
+          CASTING_LLM_API_URL: ${{ vars.CASTING_LLM_API_URL }}
+          CASTING_LLM_MODEL: ${{ vars.CASTING_LLM_MODEL }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python tools/weekly_scan.py \
+            --output weekly-report.md \
+            --run-date "${{ steps.run.outputs.date }}"
+
+      - name: Enforce report gate
+        run: |
+          python tools/casting_eval.py weekly-report.md \
+            --dnr rolodex/do-not-resurface.md \
+            --asof "${{ steps.run.outputs.date }}"
+
+      - name: Open report issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_DATE: ${{ steps.run.outputs.date }}
+        run: gh issue create --title "Weekly casting scan - ${RUN_DATE}" --body-file weekly-report.md

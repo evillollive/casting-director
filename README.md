@@ -44,14 +44,17 @@ There's one executable artifact and a few reference files. The prompt is what yo
 | [`SKILL.md`](SKILL.md) | A thin agent-skill wrapper (frontmatter + when-to-use + non-negotiables) that points at the prompt and rubric rather than duplicating them. |
 | [`sources.md`](sources.md) | The source list with its 2026 access realities (what's free, what's blocked, what costs money). |
 | [`rolodex/`](rolodex/) | Persistent memory: the do-not-resurface list and the taste log that teach the tool your eye over time. |
-| [`roadmap.md`](roadmap.md) | The three-tier build path, so the prompt can grow into a scheduled pipeline later. |
+| [`roadmap.md`](roadmap.md) | The three-tier build path, including the complete Tier 2 app contract. |
 | [`tools/casting_eval.py`](tools/casting_eval.py) | A linter for an actual run's output: catches hallucinated candidates, missing sources, undated or stale "why now", gate violations, duplicates, a shortlist clustered on one feed, resurfaced names (including in the parking lot), and briefs that touch a minor or paste private contact details. |
+| [`tools/weekly_scan.py`](tools/weekly_scan.py) | The Tier 1 pipeline: pulls public feeds, dedupes, screens, renders the canonical report, and refuses to complete if the evaluator finds an error. |
+| [`tools/prompt_builder.py`](tools/prompt_builder.py) | Builds the screening prompt from the canonical Tier 0 markdown, current rolodex, TUNING, and recent taste-log lines. |
+| [`tools/sources/`](tools/sources/) | Public HTTP connectors for Hacker News, GitHub, Reddit, Hackaday, and itch.io, all returning one shared candidate shape. |
 | [`web/`](web/) | A static browser app: prep this week's prompt with your rolodex baked in, then lint a run's shortlist with an in-browser port of the evaluator. No account, no API key, nothing uploaded. Deployed to GitHub Pages. |
 | [`tests/`](tests/) | The test suite: spec-conformance checks plus adversarial output fixtures. See [`tests/README.md`](tests/README.md). |
 
 ## How to use it this week
 
-You're at **Tier 0**: prompt-as-product, zero infrastructure.
+**Tier 0** remains the zero-infrastructure path:
 
 1. Paste the current contents of [`rolodex/do-not-resurface.md`](rolodex/do-not-resurface.md) into the prompt's DO-NOT-RESURFACE block, and update its TUNING block.
 2. Paste [`prompts/tier0-weekly-scan.md`](prompts/tier0-weekly-scan.md) into an AI assistant with live web search on, or a browsing agent that can reach the sources.
@@ -60,6 +63,28 @@ You're at **Tier 0**: prompt-as-product, zero infrastructure.
 Want to see what a finished shortlist looks like first? [`tests/fixtures/run_good.md`](tests/fixtures/run_good.md) is a clean sample run that passes every check.
 
 Those edits are the real work. They calibrate the tool's taste. **Don't write a line of pipeline code until the rubric is stable** (see [`roadmap.md`](roadmap.md)). The single source of truth for a run is the prompt; `rubric.md` is where stable lessons graduate, and the two stay in sync with a one-line update when something changes.
+
+## Run the Tier 1 pipeline
+
+Tier 1 automates the same loop without replacing its canonical prompt or its taste layer. It reads public feeds, tolerates and reports individual source failures, removes do-not-resurface and previously seen candidates, asks a configurable model endpoint for structured briefs, applies the two real shortlist gates, renders the exact Tier 0 report format, and runs `casting_eval.py` before recording the run as seen.
+
+Set the provider-neutral endpoint configuration:
+
+```bash
+export CASTING_LLM_API_KEY="..."
+export CASTING_LLM_API_URL="https://your-model-endpoint.example/v1/chat/completions"
+export CASTING_LLM_MODEL="your-model"
+```
+
+Optional TUNING values use `CASTING_TUNING_BEAT`, `CASTING_TUNING_HARD_NOS`, and `CASTING_TUNING_MORE_OF`. Then run:
+
+```bash
+python tools/weekly_scan.py \
+  --output weekly-report.md \
+  --run-date "$(date -u +%Y-%m-%d)"
+```
+
+The local seen list is persisted at `.casting/seen.json`. The scheduled workflow caches that file between runs. [`.github/workflows/weekly-scan.yml`](.github/workflows/weekly-scan.yml) runs every Monday and can also be dispatched by hand. Configure `CASTING_LLM_API_KEY` as an Actions secret, plus `CASTING_LLM_API_URL` and `CASTING_LLM_MODEL` as repository variables. It opens a GitHub Issue only after a second, explicit evaluator pass succeeds.
 
 ## Use it in your browser
 
@@ -89,9 +114,9 @@ The app fetches the real prompt, rubric, and sources from `web/content/`, which 
 
 ## The build path, in one breath
 
-- **Tier 0**: one rich prompt, run manually each week, to calibrate taste.
-- **Tier 1**: once the rubric is stable, codify it: a script pulls feeds, dedupes against the rolodex, sends survivors to an LLM API with your rubric, emits a markdown report on a GitHub Actions cron.
-- **Tier 2**: a small app with a real rolodex DB (status, tags, notes) and a dashboard, only if it earns its keep.
+- **Tier 0**: one rich prompt, run manually each week, to calibrate taste. It stays available as the no-infrastructure path.
+- **Tier 1**: the implemented sweet spot. Public feed connectors, canonical prompt assembly, persisted dedupe, structured screening, exact report rendering, evaluator enforcement, and scheduled GitHub Issues.
+- **Tier 2**: a hosted app with Postgres, a durable rolodex, scan operations, tuning, taste history, and two-way markdown sync. Build it only after Tier 1 reports are trusted.
 
 Do them in order. The rolodex is the part that compounds.
 
