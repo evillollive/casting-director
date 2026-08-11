@@ -47,6 +47,32 @@ deliberate Postgres backup/restore, and vendor-neutral OCI packaging. The scan
 worker and tuning preview still call the existing Python prompt builder and
 evaluator rather than translating their rules into TypeScript.
 
+### Launch readiness
+
+Repository validation is complete: 144 Python tests and 81 TypeScript tests
+pass, along with TypeScript type checking, ESLint, the production Next.js build,
+the main-branch CI workflow, and the static Pages release/deploy workflow.
+Backup dry-run behavior and restore refusal safety have also been exercised.
+
+The remaining work requires deployment credentials or infrastructure that is
+not currently configured:
+
+- Build and smoke-test the OCI `web`, `worker`, and `migrate` roles on a host
+  with Docker or Podman.
+- Provision staging Postgres, run migrations, create and inspect a real backup,
+  restore it into a new empty database, and complete the recovery health checks
+  in [`docs/tier2-operations.md`](docs/tier2-operations.md).
+- Configure a fine-grained repository token and webhook secret, then exercise
+  signed GitHub sync, conflict handling, retries, and idempotency against a
+  staging repository.
+- Configure `CASTING_LLM_API_KEY`, `CASTING_LLM_API_URL`, and
+  `CASTING_LLM_MODEL`, then complete the Tier 1 live editorial dry run before
+  enabling either schedule.
+- Upgrade Next.js to the first available patched release at or above `16.3.0`.
+  The current package-age policy does not yet allow that release, and the
+  production dependency audit continues to report upstream high-severity
+  advisories against the installed `16.2.1`.
+
 ### Build threshold and operating cost
 
 Build Tier 2 only after the team trusts several weeks of Tier 1 reports. Tier 2 replaces a free static and scheduled workflow with an always-on application, Postgres, background work, backups, and a hosting bill. GitHub Pages cannot host the application server or database. Keep Tier 0 and the static Pages app working as the no-infrastructure path even after Tier 2 launches.
