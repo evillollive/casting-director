@@ -22,6 +22,8 @@ jobs:
         run: pip install -r requirements-dev.txt
       - name: Install application dependencies
         run: npm ci
+      - name: Check the installable skill bundle is in sync
+        run: python tools/sync_skill_bundle.py --check
       - name: Run the Python test suite
         run: pytest tests/ -q
       - name: Run the TypeScript test suite

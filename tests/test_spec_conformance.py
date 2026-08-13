@@ -53,7 +53,15 @@ def all_markdown():
             if name not in {".git", ".next", "node_modules"}
         ]
         parent = Path(directory)
-        if "content" in parent.relative_to(ROOT).parts[:2]:
+        parent_parts = parent.relative_to(ROOT).parts
+        # web/content and the installable skill/ bundle are generated mirrors of
+        # the canonical docs. Their copies deliberately keep the source's
+        # root-relative links, and the skill's install docs name concrete agent
+        # targets, so both are exempt here. A dedicated sync/drift test keeps each
+        # mirror byte-identical to the policy-checked canonical files.
+        if "content" in parent_parts[:2]:
+            continue
+        if parent_parts[:1] == ("skill",):
             continue
         markdown.extend(parent / name for name in files if name.endswith(".md"))
     return markdown

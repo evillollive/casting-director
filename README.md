@@ -43,6 +43,7 @@ implementations automate that contract without replacing it.
 | [`prompts/tier0-weekly-scan.md`](prompts/tier0-weekly-scan.md) | **The runtime artifact.** Self-contained and canonical for a run: sources, the compact rubric, the gates, verification rules, exclusions, and the exact output format. Paste it in and run it weekly. |
 | [`rubric.md`](rubric.md) | The expanded rubric: scoring guide, gate logic, false-positive patterns, list-level diversity, and a worked example. The deeper companion to the compact rubric in the prompt. |
 | [`SKILL.md`](SKILL.md) | A thin agent-skill wrapper (frontmatter + when-to-use + non-negotiables) that points at the prompt and rubric rather than duplicating them. |
+| [`skill/casting-director/`](skill/casting-director/) | **The installable skill bundle.** A self-contained, portable copy of the Tier 0 skill (runtime prompt, rubric, sources, seed rolodex, and offline evaluator) you can install into a local agent or another assistant's skills directory. Mirrored from the canonical files by [`tools/sync_skill_bundle.py`](tools/sync_skill_bundle.py) and drift-checked in CI. |
 | [`sources.md`](sources.md) | The source list with its 2026 access realities (what's free, what's blocked, what costs money). |
 | [`rolodex/`](rolodex/) | Persistent memory: the do-not-resurface list and the taste log that teach the tool your eye over time. |
 | [`roadmap.md`](roadmap.md) | The three-tier build path, including the complete Tier 2 app contract. |
@@ -95,6 +96,45 @@ The durable seen list lives at [`rolodex/seen.json`](rolodex/seen.json) and is c
 [`.github/workflows/weekly-scan.yml`](.github/workflows/weekly-scan.yml) can be dispatched by hand and includes a disabled Monday schedule. Configure `CASTING_LLM_API_KEY` as an Actions secret, plus `CASTING_LLM_API_URL` and `CASTING_LLM_MODEL` as repository variables. A publishing run opens a GitHub Issue only after a second, explicit evaluator pass succeeds, then commits the updated seen state to `main`. If delivery fails, memory is not advanced, so a transient Issue failure cannot silently discard the shortlist.
 
 The pipeline is complete and tested, but its cron is intentionally disabled until live screening is proven. Manual dispatch defaults to `dry_run: true`: it runs sourcing, screening, rendering, and `casting_eval.py`, then uploads the report as an artifact without opening an Issue or advancing seen memory. Re-enable the commented schedule only after one reviewed dry run passes the evaluator and reads like casting briefs rather than link slop.
+
+## Install as a skill (standalone)
+
+Prefer to run the Tier 0 loop from inside your own agent instead of pasting a
+prompt? [`skill/casting-director/`](skill/casting-director/) is a **self-contained,
+portable agent skill you can take away on its own.** It has no imports or paths
+back into this repo: it bundles its own runtime prompt, rubric, sources, a sample
+run, a seed rolodex, and the zero-dependency evaluator. You do not need Tier 1,
+Tier 2, an account, an API key, or a database to use it.
+
+Grab just that one folder (download it, unzip a shared
+`casting-director-skill.zip`, or sparse-checkout the path) and install it by
+copying it into your agent's skills directory:
+
+```bash
+# per project
+cp -R skill/casting-director <your-skills-dir>/casting-director
+```
+
+Then, from any working directory, ask your agent for "a casting-director scan."
+On the first run it creates `./casting-rolodex/` (your live do-not-resurface list
+and taste log) from the bundled seeds, works the sources, and hands back a ranked
+shortlist. Your memory lives in that working-directory folder, not in the
+read-only skill, so the rolodex still compounds run to run.
+
+The concrete per-agent skills directories, a full "one run, start to finish"
+walkthrough, and a one-command zip packager are in
+**[`skill/casting-director/INSTALL.md`](skill/casting-director/INSTALL.md)**. How
+the agent runs it is documented in
+[`skill/casting-director/SKILL.md`](skill/casting-director/SKILL.md).
+
+### How the skill relates to this repo
+
+The bundle is a byte-for-byte mirror of this repo's canonical files, so the skill
+and the project never tell two different stories. After editing any canonical
+file, run `python tools/sync_skill_bundle.py`; a test and a CI step fail if the
+copies drift. In short: the skill is the portable Tier 0 you can hand to anyone,
+while this repository additionally carries the scheduled Tier 1 pipeline and the
+hosted Tier 2 app built on the same editorial contract.
 
 ## Use it in your browser
 

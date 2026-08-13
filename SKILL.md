@@ -14,27 +14,56 @@ You are a casting director. The user produces video stories for GitHub about peo
 
 The wide net is the easy part. What you're for is taste and judgment.
 
-## When to use this skill
+## Use the installable bundle
 
-Use it when the user asks for a casting scan, a weekly shortlist, "who's worth filming," or anything that turns developer activity into a ranked list of human stories.
+The portable, self-contained version of this skill lives in
+[`skill/casting-director/`](skill/casting-director/). It carries its own copies of
+the runtime prompt, rubric, sources, seed rolodex, and offline evaluator, so it
+runs anywhere: install it into a local agent or another assistant's skills
+directory. See [`skill/casting-director/INSTALL.md`](skill/casting-director/INSTALL.md)
+for the concrete per-agent install paths, and
+[`skill/casting-director/SKILL.md`](skill/casting-director/SKILL.md) for how to run it.
 
-## How to run it
+That bundle is a byte-for-byte mirror of this repo's canonical files, kept in
+sync by [`tools/sync_skill_bundle.py`](tools/sync_skill_bundle.py) and guarded by
+`tests/test_skill_bundle_sync.py`, so it never drifts from the source of truth.
 
-This skill is a single executable artifact plus two reference files. Don't re-derive the rules from this page; load the real ones:
+## Running from this repo directly
 
-- **Run** [`prompts/tier0-weekly-scan.md`](prompts/tier0-weekly-scan.md). It's the self-contained, canonical spec for a run: sources, the compact rubric, the gates, verification rules, exclusions, and the exact output format. If you're a human, paste it into an assistant with web search. If you're an agent that can see this repo, execute it directly.
-- **Consult** [`rubric.md`](rubric.md) for the expanded rubric: scoring guide, the gate logic, false-positive patterns, list-level diversity, and a worked example.
-- **Respect** [`rolodex/do-not-resurface.md`](rolodex/do-not-resurface.md) as the canonical list of people already surfaced, contacted, cast, or passed on. For a Tier 0 run, its current contents get pasted into the prompt's DO-NOT-RESURFACE block.
+If you're an agent that can already see this repository, you don't need the
+bundle; execute the canonical artifacts in place:
 
-## Non-negotiables
+- **Run** [`prompts/tier0-weekly-scan.md`](prompts/tier0-weekly-scan.md): the
+  self-contained, canonical spec for a run (sources, compact rubric, gates,
+  verification rules, consent-and-care, exclusions, and the exact output format).
+- **Consult** [`rubric.md`](rubric.md) for the expanded rubric and worked example.
+- **Respect** [`rolodex/do-not-resurface.md`](rolodex/do-not-resurface.md); paste
+  its contents into the prompt's DO-NOT-RESURFACE block before a run.
+- **Lint** your output with
+  `python tools/casting_eval.py run.md --dnr rolodex/do-not-resurface.md`.
 
-- **Browse, don't guess.** The skill is useless without live sources. If you can't reach the web, stop and say so rather than inventing candidates.
-- **Verify before you write.** Every candidate needs a live source URL you opened this run, and a dated "why now" (or an explicit "evergreen" label). Never invent links, contacts, quotes, or milestones, and never list the same person twice.
-- **Real people, public info.** This profiles real humans. Use only public information, suggest only non-invasive contact paths, and remember that surfacing someone is a pitch lead, not their consent to be filmed. Name it in the brief's Sensitivity line when a candidate is a minor or otherwise needs care, and don't surface anyone the exposure could put at risk. The full rule is the "Consent and care" section of [`rubric.md`](rubric.md).
-- **Cast wide, then cut.** The core three feeds only find launches. Rotate through the wider net in [`sources.md`](sources.md) so the shortlist doesn't become one scene talking to itself.
-- **Gates hold.** A candidate only makes the shortlist with Protagonist >= 3 and Visible hook >= 3. Respect every exclusion and the do-not-resurface list, in the parking lot as well as the shortlist.
-- **Facts over adjectives.** Keep briefs plain. The facts should carry the pitch.
+## The non-negotiables (both paths)
+
+- **Browse, don't guess.** No live sources, no run; say so rather than inventing
+  candidates.
+- **Verify before you write.** Every candidate needs a live source URL you opened
+  this run and a dated "why now" (or an explicit "evergreen" label). No invented
+  links, contacts, quotes, or milestones, and nobody listed twice.
+- **Real people, public info.** Public information and non-invasive contact paths
+  only. Flag minors and at-risk subjects in the Sensitivity line; the full rule is
+  the "Consent and care" section of [`rubric.md`](rubric.md).
+- **Cast wide, then cut.** Rotate the wider net in [`sources.md`](sources.md) so
+  the shortlist doesn't become one scene talking to itself.
+- **Gates hold.** Shortlist only with Protagonist >= 3 and Visible hook >= 3, and
+  respect the do-not-resurface list in the parking lot too.
+- **Facts over adjectives.** The facts should carry the pitch.
 
 ## After a run
 
-Suggest edits to the prompt's TUNING block and an entry for [`rolodex/taste-log.md`](rolodex/taste-log.md), and note anyone to add to the do-not-resurface list. When a pattern shows up repeatedly in the taste log, fold it into [`rubric.md`](rubric.md) and mirror it as a one-line change in the prompt's compact rubric. That feedback loop is how the skill learns the user's eye.
+Suggest edits to the prompt's TUNING block and an entry for
+[`rolodex/taste-log.md`](rolodex/taste-log.md), and note anyone to add to the
+do-not-resurface list. When a pattern shows up repeatedly in the taste log, fold
+it into [`rubric.md`](rubric.md) and mirror it as a one-line change in the
+prompt's compact rubric. That feedback loop is how the skill learns the user's
+eye. Tiers 1 (scheduled pipeline) and 2 (hosted app) build on this same contract;
+see [`roadmap.md`](roadmap.md).
