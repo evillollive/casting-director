@@ -274,6 +274,40 @@ export async function listScans(
   };
 }
 
+// The execution snapshots are large audit columns: memorySnapshot alone holds
+// every non-merged candidate in the workspace. The worker reads them straight
+// from the database, and the detail response is polled every few seconds while
+// a scan runs, so they are deliberately excluded here.
+const scanDetailSelect = {
+  id: true,
+  workspaceId: true,
+  status: true,
+  triggeredById: true,
+  tuningRevisionId: true,
+  startedAt: true,
+  completedAt: true,
+  candidatesFetched: true,
+  candidatesDeduped: true,
+  candidatesScreened: true,
+  shortlistCount: true,
+  parkingCount: true,
+  summary: true,
+  reportMarkdown: true,
+  error: true,
+  runDate: true,
+  evalPassed: true,
+  promptHash: true,
+  configHash: true,
+  tuningHash: true,
+  tasteLogHash: true,
+  memoryHash: true,
+  doNotResurfaceHash: true,
+  createdAt: true,
+  updatedAt: true,
+  version: true,
+  ...scanInclude,
+} satisfies Prisma.ScanSelect;
+
 export async function getScan(
   database: PrismaClient,
   workspaceId: string,
@@ -281,8 +315,8 @@ export async function getScan(
 ) {
   const scan = await database.scan.findFirst({
     where: { id, workspaceId },
-    include: {
-      ...scanInclude,
+    select: {
+      ...scanDetailSelect,
       candidates: {
         include: {
           candidate: {
