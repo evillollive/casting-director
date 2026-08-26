@@ -222,6 +222,28 @@ export async function createOrGetActiveScan(
   }
 }
 
+// The list response never reads the execution snapshots or the report body, and
+// memorySnapshot alone holds every non-merged candidate in the workspace. Fetch
+// only the projected columns so a page of history does not stream megabytes of
+// audit JSON out of the database per row.
+const scanListSelect = {
+  id: true,
+  status: true,
+  runDate: true,
+  startedAt: true,
+  completedAt: true,
+  createdAt: true,
+  candidatesFetched: true,
+  candidatesDeduped: true,
+  candidatesScreened: true,
+  shortlistCount: true,
+  parkingCount: true,
+  summary: true,
+  error: true,
+  evalPassed: true,
+  ...scanInclude,
+} satisfies Prisma.ScanSelect;
+
 export async function listScans(
   database: PrismaClient,
   workspaceId: string,
@@ -245,7 +267,7 @@ export async function listScans(
     cursor: query.cursor ? { id: query.cursor } : undefined,
     skip: query.cursor ? 1 : 0,
     take: query.limit + 1,
-    include: scanInclude,
+    select: scanListSelect,
   });
   const hasMore = items.length > query.limit;
   if (hasMore) items.pop();

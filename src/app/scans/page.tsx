@@ -18,7 +18,21 @@ export default async function ScansPage() {
     where: { workspaceId: access.principal.workspaceId },
     orderBy: [{ createdAt: "desc" }],
     take: 50,
-    include: {
+    select: {
+      // The execution snapshots are large audit columns that this page never
+      // renders; memorySnapshot alone holds every non-merged candidate in the
+      // workspace, so fetching 50 rows of them would dominate the query.
+      id: true,
+      status: true,
+      runDate: true,
+      summary: true,
+      error: true,
+      evalPassed: true,
+      reportMarkdown: true,
+      candidatesFetched: true,
+      candidatesScreened: true,
+      shortlistCount: true,
+      parkingCount: true,
       sources: { include: { source: true }, orderBy: { createdAt: "asc" } },
       evaluatorViolations: { orderBy: { createdAt: "asc" } },
     },
