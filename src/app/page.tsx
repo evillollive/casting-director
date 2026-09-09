@@ -5,6 +5,7 @@ import { EmptyState } from "@/components/empty-state";
 import { PageHeading } from "@/components/page-heading";
 import { ScoreBadge } from "@/components/score-badge";
 import { prisma } from "@/server/db";
+import { getShortlistScan } from "@/server/scan/service";
 import { resolvePageAccess } from "@/server/auth/page-auth";
 
 export const dynamic = "force-dynamic";
@@ -15,38 +16,7 @@ export default async function ShortlistPage() {
     return <div className="page-stack"><AccessState access={access} /></div>;
   }
 
-  const scan = await prisma.scan.findFirst({
-    where: {
-      workspaceId: access.principal.workspaceId,
-      status: "COMPLETED",
-      evalPassed: true,
-    },
-    orderBy: [{ completedAt: "desc" }, { createdAt: "desc" }],
-    include: {
-      evaluatorViolations: { orderBy: { createdAt: "asc" } },
-      candidates: {
-        where: {
-          placement: "SHORTLIST",
-          candidate: {
-            doNotResurface: false,
-            notForSurfacing: false,
-          },
-        },
-        orderBy: [{ rank: "asc" }],
-        include: {
-          candidate: {
-            include: {
-              provenance: {
-                orderBy: { lastSeenAt: "desc" },
-                take: 1,
-                include: { source: true },
-              },
-            },
-          },
-        },
-      },
-    },
-  });
+  const scan = await getShortlistScan(prisma, access.principal.workspaceId);
 
   return (
     <div className="page-stack">
@@ -76,7 +46,7 @@ export default async function ShortlistPage() {
           <section className="metric-grid" aria-label="Latest scan summary">
             <article className="metric-card"><span>Current shortlist</span><strong>{scan.candidates.length}</strong><small>{scan.shortlistCount} in the immutable report · {scan.runDate.toISOString().slice(0, 10)}</small></article>
             <article className="metric-card"><span>Parking lot</span><strong>{scan.parkingCount}</strong><small>Preserved in immutable report</small></article>
-            <article className="metric-card"><span>Evaluator</span><strong className="metric-success">Passed</strong><small>{scan.evaluatorViolations.length} recorded findings</small></article>
+            <article className="metric-card"><span>Evaluator</span><strong className="metric-success">Passed</strong><small>{scan._count.evaluatorViolations} recorded findings</small></article>
           </section>
           {scan.candidates.length === 0 ? (
             <EmptyState marker="01" title="No currently eligible candidates">

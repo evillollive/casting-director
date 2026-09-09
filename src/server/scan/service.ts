@@ -296,6 +296,69 @@ export async function listScans(
   };
 }
 
+// The shortlist surface renders the newest completed, evaluator-clean report.
+// It never reads the execution snapshots or the report body, so the projection
+// stays narrow: memorySnapshot alone holds every non-merged candidate in the
+// workspace, and the page is server-rendered on every request.
+const shortlistScanSelect = {
+  id: true,
+  runDate: true,
+  shortlistCount: true,
+  parkingCount: true,
+  _count: { select: { evaluatorViolations: true } },
+} satisfies Prisma.ScanSelect;
+
+export async function getShortlistScan(
+  database: PrismaClient,
+  workspaceId: string,
+) {
+  return database.scan.findFirst({
+    where: { workspaceId, status: "COMPLETED", evalPassed: true },
+    orderBy: [{ completedAt: "desc" }, { createdAt: "desc" }],
+    select: {
+      ...shortlistScanSelect,
+      candidates: {
+        where: {
+          placement: "SHORTLIST",
+          candidate: { doNotResurface: false, notForSurfacing: false },
+        },
+        orderBy: [{ rank: "asc" }],
+        select: {
+          id: true,
+          rank: true,
+          hook: true,
+          whyNow: true,
+          rationale: true,
+          caveat: true,
+          sensitivity: true,
+          overallScore: true,
+          protagonistScore: true,
+          visibleHookScore: true,
+          candidate: {
+            select: {
+              id: true,
+              name: true,
+              handle: true,
+              project: true,
+              status: true,
+              version: true,
+              doNotResurface: true,
+              provenance: {
+                orderBy: { lastSeenAt: "desc" },
+                take: 1,
+                select: {
+                  sourceUrl: true,
+                  source: { select: { displayName: true } },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+}
+
 // The execution snapshots are large audit columns: memorySnapshot alone holds
 // every non-merged candidate in the workspace. The worker reads them straight
 // from the database, and the detail response is polled every few seconds while
