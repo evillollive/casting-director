@@ -296,6 +296,68 @@ export async function listScans(
   };
 }
 
+// The shortlist is the application root, so this query runs on every visit to
+// the busiest page. It renders counts, the run date, and the eligible
+// appearances only, so none of the audit snapshots, the report body, or the
+// per-appearance model metadata are selected, and the evaluator findings are
+// counted in the database instead of streamed back as rows.
+const shortlistScanSelect = {
+  shortlistCount: true,
+  parkingCount: true,
+  runDate: true,
+  _count: { select: { evaluatorViolations: true } },
+  candidates: {
+    where: {
+      placement: "SHORTLIST" as const,
+      candidate: { doNotResurface: false, notForSurfacing: false },
+    },
+    orderBy: { rank: "asc" as const },
+    select: {
+      id: true,
+      rank: true,
+      hook: true,
+      whyNow: true,
+      rationale: true,
+      caveat: true,
+      sensitivity: true,
+      overallScore: true,
+      protagonistScore: true,
+      visibleHookScore: true,
+      candidate: {
+        select: {
+          id: true,
+          name: true,
+          handle: true,
+          project: true,
+          status: true,
+          version: true,
+          doNotResurface: true,
+          provenance: {
+            orderBy: { lastSeenAt: "desc" as const },
+            take: 1,
+            select: {
+              id: true,
+              sourceUrl: true,
+              source: { select: { displayName: true } },
+            },
+          },
+        },
+      },
+    },
+  },
+} satisfies Prisma.ScanSelect;
+
+export async function getShortlistScan(
+  database: PrismaClient,
+  workspaceId: string,
+) {
+  return database.scan.findFirst({
+    where: { workspaceId, status: "COMPLETED", evalPassed: true },
+    orderBy: [{ completedAt: "desc" }, { createdAt: "desc" }],
+    select: shortlistScanSelect,
+  });
+}
+
 // The execution snapshots are large audit columns: memorySnapshot alone holds
 // every non-merged candidate in the workspace. The worker reads them straight
 // from the database, and the detail response is polled every few seconds while
