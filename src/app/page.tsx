@@ -22,8 +22,15 @@ export default async function ShortlistPage() {
       evalPassed: true,
     },
     orderBy: [{ completedAt: "desc" }, { createdAt: "desc" }],
-    include: {
-      evaluatorViolations: { orderBy: { createdAt: "asc" } },
+    // The execution snapshots are large audit columns that this page never
+    // renders; memorySnapshot alone holds every non-merged candidate in the
+    // workspace, and promptSnapshot holds the whole canonical prompt. Project
+    // only the columns the shortlist actually reads.
+    select: {
+      runDate: true,
+      shortlistCount: true,
+      parkingCount: true,
+      evaluatorViolations: { select: { id: true } },
       candidates: {
         where: {
           placement: "SHORTLIST",
@@ -33,13 +40,33 @@ export default async function ShortlistPage() {
           },
         },
         orderBy: [{ rank: "asc" }],
-        include: {
+        select: {
+          id: true,
+          rank: true,
+          hook: true,
+          whyNow: true,
+          rationale: true,
+          caveat: true,
+          sensitivity: true,
+          overallScore: true,
+          protagonistScore: true,
+          visibleHookScore: true,
           candidate: {
-            include: {
+            select: {
+              id: true,
+              name: true,
+              handle: true,
+              project: true,
+              status: true,
+              version: true,
+              doNotResurface: true,
               provenance: {
                 orderBy: { lastSeenAt: "desc" },
                 take: 1,
-                include: { source: true },
+                select: {
+                  sourceUrl: true,
+                  source: { select: { displayName: true } },
+                },
               },
             },
           },
