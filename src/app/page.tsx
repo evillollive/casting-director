@@ -6,6 +6,7 @@ import { PageHeading } from "@/components/page-heading";
 import { ScoreBadge } from "@/components/score-badge";
 import { prisma } from "@/server/db";
 import { resolvePageAccess } from "@/server/auth/page-auth";
+import { loadLatestShippableScan } from "@/server/scan/shortlist";
 
 export const dynamic = "force-dynamic";
 
@@ -15,38 +16,10 @@ export default async function ShortlistPage() {
     return <div className="page-stack"><AccessState access={access} /></div>;
   }
 
-  const scan = await prisma.scan.findFirst({
-    where: {
-      workspaceId: access.principal.workspaceId,
-      status: "COMPLETED",
-      evalPassed: true,
-    },
-    orderBy: [{ completedAt: "desc" }, { createdAt: "desc" }],
-    include: {
-      evaluatorViolations: { orderBy: { createdAt: "asc" } },
-      candidates: {
-        where: {
-          placement: "SHORTLIST",
-          candidate: {
-            doNotResurface: false,
-            notForSurfacing: false,
-          },
-        },
-        orderBy: [{ rank: "asc" }],
-        include: {
-          candidate: {
-            include: {
-              provenance: {
-                orderBy: { lastSeenAt: "desc" },
-                take: 1,
-                include: { source: true },
-              },
-            },
-          },
-        },
-      },
-    },
-  });
+  const scan = await loadLatestShippableScan(
+    prisma,
+    access.principal.workspaceId,
+  );
 
   return (
     <div className="page-stack">
